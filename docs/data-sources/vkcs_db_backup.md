@@ -39,7 +39,7 @@ In addition to all arguments above, the following attributes are exported:
 
 - `meta` **String** Metadata of the backup
 
-- `name` **String** The name of the backup.
+- `name` **String** The name of the backup1.
 
 - `size` **Number** Backup's volume size
 
