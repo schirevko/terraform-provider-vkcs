@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -58,6 +59,7 @@ func resourceDatabaseInstance() *schema.Resource {
 		ReadContext:   resourceDatabaseInstanceRead,
 		DeleteContext: resourceDatabaseInstanceDelete,
 		UpdateContext: resourceDatabaseInstanceUpdate,
+		CustomizeDiff: resourceDatabaseCustomizeDiff,
 		Importer: &schema.ResourceImporter{
 			StateContext: func(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 				config := meta.(configer)
@@ -202,22 +204,39 @@ func resourceDatabaseInstance() *schema.Resource {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"uuid": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							ForceNew:    true,
-							Description: "The id of the network. Changing this creates a new instance.",
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+							Description: "The id of the network. Changing this creates a new instance." +
+								"**Note** Although this argument is marked as optional, it is actually required at the moment. Not setting a value for it may cause an error.",
 						},
 						"port": {
 							Type:        schema.TypeString,
 							Optional:    true,
 							ForceNew:    true,
-							Description: "The port id of the network. Changing this creates a new instance.",
+							Description: "The port id of the network. Changing this creates a new instance. ***Deprecated*** This argument is deprecated, please do not use it.",
+							Deprecated:  "This argument is deprecated, please do not use it.",
 						},
 						"fixed_ip_v4": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+							Description: "The IPv4 address. Changing this creates a new instance. " +
+								"**Note** This argument conflicts with \"replica_of\". Setting both at the same time causes \"fixed_ip_v4\" to be ignored.",
+						},
+						"subnet_id": {
 							Type:        schema.TypeString,
 							Optional:    true,
 							ForceNew:    true,
-							Description: "The IPv4 address. Changing this creates a new instance.",
+							Description: "The id of the subnet. Changing this creates a new instance. **New since v.0.1.15**.",
+						},
+						"security_groups": {
+							Type:        schema.TypeSet,
+							Optional:    true,
+							ForceNew:    true,
+							Elem:        &schema.Schema{Type: schema.TypeString},
+							Set:         schema.HashString,
+							Description: "An array of one or more security group IDs to associate with the instance. Changing this creates a new instance. **New since v.0.2.0**.",
 						},
 					},
 				},
@@ -415,6 +434,24 @@ func resourceDatabaseInstance() *schema.Resource {
 				},
 				Description: "Object that represents configuration of PITR backup. This functionality is available only for postgres datastore. **New since v.0.1.4**.",
 			},
+
+			"cloud_monitoring_enabled": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				ForceNew:    false,
+				Description: "Enable cloud monitoring for the instance. Changing this for Redis or MongoDB creates a new instance. **New since v.0.2.0**",
+			},
+
+			// Computed values
+			"ip": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Computed: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "IP address of the instance.",
+			},
 		},
 		Description: "Provides a db instance resource. This can be used to create, modify and delete db instance.",
 	}
@@ -429,13 +466,14 @@ func resourceDatabaseInstanceCreate(ctx context.Context, d *schema.ResourceData,
 
 	size := d.Get("size").(int)
 	createOpts := &dbInstanceCreateOpts{
-		FlavorRef:         d.Get("flavor_id").(string),
-		Name:              d.Get("name").(string),
-		Volume:            &volume{Size: &size, VolumeType: d.Get("volume_type").(string)},
-		ReplicaOf:         d.Get("replica_of").(string),
-		AvailabilityZone:  d.Get("availability_zone").(string),
-		FloatingIPEnabled: d.Get("floating_ip_enabled").(bool),
-		Keypair:           d.Get("keypair").(string),
+		FlavorRef:              d.Get("flavor_id").(string),
+		Name:                   d.Get("name").(string),
+		Volume:                 &volume{Size: &size, VolumeType: d.Get("volume_type").(string)},
+		ReplicaOf:              d.Get("replica_of").(string),
+		AvailabilityZone:       d.Get("availability_zone").(string),
+		FloatingIPEnabled:      d.Get("floating_ip_enabled").(bool),
+		Keypair:                d.Get("keypair").(string),
+		CloudMonitoringEnabled: d.Get("cloud_monitoring_enabled").(bool),
 	}
 
 	message := "unable to determine vkcs_db_instance"
@@ -464,7 +502,7 @@ func resourceDatabaseInstanceCreate(ctx context.Context, d *schema.ResourceData,
 	}
 
 	if v, ok := d.GetOk("network"); ok {
-		createOpts.Nics, err = extractDatabaseNetworks(v.([]interface{}))
+		createOpts.Nics, createOpts.SecurityGroups, err = extractDatabaseNetworks(v.([]interface{}))
 		if err != nil {
 			return diag.Errorf("%s network", message)
 		}
@@ -661,7 +699,40 @@ func resourceDatabaseInstanceRead(ctx context.Context, d *schema.ResourceData, m
 		d.Set("backup_schedule", nil)
 	}
 
-	return nil
+	d.Set("ip", instance.IP)
+
+	if !d.HasChangesExcept() {
+		return nil
+	}
+
+	var diags diag.Diagnostics
+
+	rawNetworks := d.Get("network").([]interface{})
+	diags = checkDBNetworks(rawNetworks, cty.Path{}, diags)
+
+	// Check if user set both "replica_of" and "network.fixed_ip_v4"
+	if _, ok := d.GetOk("replica_of"); !ok {
+		return diags
+	}
+	for i, n := range rawNetworks {
+		rawNetwork := n.(map[string]interface{})
+		if v := rawNetwork["fixed_ip_v4"].(string); v != "" {
+			path := cty.Path{
+				cty.GetAttrStep{Name: "network"},
+				cty.IndexStep{Key: cty.NumberIntVal(int64(i))},
+				cty.GetAttrStep{Name: "fixed_ip_v4"},
+			}
+			diags = append(diags, diag.Diagnostic{
+				Severity: diag.Warning,
+				Summary:  "Field conflicts with attribute \"replica_of\".",
+				Detail: "Setting \"fixed_ip_v4\" and \"replica_of\" at the same time " +
+					"causes the \"fixed_ip_v4\" field to be ignored.",
+				AttributePath: path,
+			})
+		}
+	}
+
+	return diags
 }
 
 func resourceDatabaseInstanceUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -926,6 +997,18 @@ func resourceDatabaseInstanceUpdate(ctx context.Context, d *schema.ResourceData,
 		if err != nil {
 			return diag.Errorf("error waiting for vkcs_db_instance %s to become ready: %s", d.Id(), err)
 		}
+	}
+
+	if d.HasChange("cloud_monitoring_enabled") {
+		_, new := d.GetChange("cloud_monitoring_enabled")
+		var cloudMonitoringOpts updateCloudMonitoringOpts
+		cloudMonitoringOpts.CloudMonitoring.Enable = new.(bool)
+
+		err := instanceAction(DatabaseV1Client, d.Id(), &cloudMonitoringOpts).ExtractErr()
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		log.Printf("Update cloud_monitoring_enabled in vkcs_db_instance %s", d.Id())
 	}
 
 	return resourceDatabaseInstanceRead(ctx, d, meta)

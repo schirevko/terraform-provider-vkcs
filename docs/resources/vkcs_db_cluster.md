@@ -24,6 +24,7 @@ resource "vkcs_db_cluster" "db-cluster" {
   cluster_size = 3
 
   flavor_id   = data.vkcs_compute_flavor.db.id
+  cloud_monitoring_enabled = true
 
   volume_size = 10
   volume_type = "ceph-ssd"
@@ -33,9 +34,21 @@ resource "vkcs_db_cluster" "db-cluster" {
   }
 
   depends_on = [
-    vkcs_networking_network.db,
-    vkcs_networking_subnet.db
+    vkcs_networking_router_interface.db
   ]
+}
+
+data "vkcs_lb_loadbalancer" "loadbalancer" {
+  id = "${vkcs_db_cluster.db-cluster.loadbalancer_id}"
+}
+
+data "vkcs_networking_port" "loadbalancer-port" {
+  port_id = "${data.vkcs_lb_loadbalancer.loadbalancer.vip_port_id}"
+}
+
+output "cluster_ips" {
+  value = "${data.vkcs_networking_port.loadbalancer-port.all_fixed_ips}"
+  description = "IP addresses of the cluster."
 }
 ```
 
@@ -130,6 +143,8 @@ resource "vkcs_db_cluster" "mydb-cluster" {
 
   - `settings` <strong>Map of </strong>**String** (*Optional*) Map of key-value settings of the capability.
 
+- `cloud_monitoring_enabled` **Boolean** (*Optional*) Enable cloud monitoring for the cluster. Changing this for Redis or MongoDB creates a new instance. **New since v.0.2.0**
+
 - `configuration_id` **String** (*Optional*) The id of the configuration attached to cluster.
 
 - `disk_autoexpand` (*Optional*) Object that represents autoresize properties of the cluster.
@@ -142,9 +157,13 @@ resource "vkcs_db_cluster" "mydb-cluster" {
 - `keypair` **String** (*Optional*) Name of the keypair to be attached to cluster. Changing this creates a new cluster.
 
 - `network` (*Optional*) Object that represents network of the cluster. Changing this creates a new cluster.
-  - `port` **String** (*Optional*) The port id of the network. Changing this creates a new cluster.
+  - `port` **String** (*Optional* Deprecated) The port id of the network. Changing this creates a new cluster. ***Deprecated*** This argument is deprecated, please do not use it.
 
-  - `uuid` **String** (*Optional*) The id of the network. Changing this creates a new cluster.
+  - `security_groups` <strong>Set of </strong>**String** (*Optional*) An array of one or more security group IDs to associate with the cluster instances. Changing this creates a new cluster. **New since v.0.2.0**.
+
+  - `subnet_id` **String** (*Optional*) The id of the subnet. Changing this creates a new cluster. **New since v.0.1.15**.
+
+  - `uuid` **String** (*Optional*) The id of the network. Changing this creates a new cluster.**Note** Although this argument is marked as optional, it is actually required at the moment. Not setting a value for it may cause an error.
 
 - `region` **String** (*Optional*) Region to create resource in.
 
@@ -156,6 +175,8 @@ resource "vkcs_db_cluster" "mydb-cluster" {
 - `root_enabled` **Boolean** (*Optional*) Indicates whether root user is enabled for the cluster.
 
 - `root_password` **String** (*Optional* Sensitive) Password for the root user of the cluster.
+
+- `shrink_options` **String** (*Optional*) Used only for shrinking cluster. List of IDs of instances that should remain after shrink. If no options are supplied, shrink operation will choose first non-leader instance to delete.
 
 - `wal_disk_autoexpand` (*Optional*) Object that represents autoresize properties of wal volume of the cluster.
   - `autoexpand` **Boolean** (*Optional*) Indicates whether wal volume autoresize is enabled.
@@ -169,77 +190,12 @@ resource "vkcs_db_cluster" "mydb-cluster" {
 
 
 ## Attributes Reference
-- `cluster_size` **Number** See Argument Reference above.
-
-- `datastore`  See Argument Reference above.
-  - `type` **String** See Argument Reference above.
-
-  - `version` **String** See Argument Reference above.
-
-- `flavor_id` **String** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `volume_size` **Number** See Argument Reference above.
-
-- `volume_type` **String** See Argument Reference above.
-
-- `availability_zone` **String** See Argument Reference above.
-
-- `backup_schedule`  See Argument Reference above.
-  - `interval_hours` **Number** See Argument Reference above.
-
-  - `keep_count` **Number** See Argument Reference above.
-
-  - `name` **String** See Argument Reference above.
-
-  - `start_hours` **Number** See Argument Reference above.
-
-  - `start_minutes` **Number** See Argument Reference above.
-
-- `capabilities`  See Argument Reference above.
-  - `name` **String** See Argument Reference above.
-
-  - `settings` <strong>Map of </strong>**String** See Argument Reference above.
-
-- `configuration_id` **String** See Argument Reference above.
-
-- `disk_autoexpand`  See Argument Reference above.
-  - `autoexpand` **Boolean** See Argument Reference above.
-
-  - `max_disk_size` **Number** See Argument Reference above.
-
-- `floating_ip_enabled` **Boolean** See Argument Reference above.
-
-- `keypair` **String** See Argument Reference above.
-
-- `network`  See Argument Reference above.
-  - `port` **String** See Argument Reference above.
-
-  - `uuid` **String** See Argument Reference above.
-
-- `region` **String** See Argument Reference above.
-
-- `restore_point`  See Argument Reference above.
-  - `backup_id` **String** See Argument Reference above.
-
-  - `target` **String** See Argument Reference above.
-
-- `root_enabled` **Boolean** See Argument Reference above.
-
-- `root_password` **String** See Argument Reference above.
-
-- `wal_disk_autoexpand`  See Argument Reference above.
-  - `autoexpand` **Boolean** See Argument Reference above.
-
-  - `max_disk_size` **Number** See Argument Reference above.
-
-- `wal_volume`  See Argument Reference above.
-  - `size` **Number** See Argument Reference above.
-
-  - `volume_type` **String** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `id` **String** ID of the resource.
+
+- `instances` **Object** Cluster instances info.
+
+- `loadbalancer_id` **String** The id of the loadbalancer attached to the cluster. **New since v.0.1.15**.
 
 
 

@@ -2,9 +2,13 @@ package vkcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"sort"
+	"strings"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -16,6 +20,7 @@ func resourceDatabaseClusterWithShards() *schema.Resource {
 		ReadContext:   resourceDatabaseClusterWithShardsRead,
 		DeleteContext: resourceDatabaseClusterWithShardsDelete,
 		UpdateContext: resourceDatabaseClusterWithShardsUpdate,
+		CustomizeDiff: resourceDatabaseCustomizeDiff,
 		Importer: &schema.ResourceImporter{
 			StateContext: func(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 				config := meta.(configer)
@@ -41,7 +46,8 @@ func resourceDatabaseClusterWithShards() *schema.Resource {
 						continue
 					}
 					shardIDs[inst.ShardID] = 1
-					newShard := flattenDatabaseClusterShard(inst)
+					newShard := flattenDatabaseClusterShard(inst.ShardID, []dbClusterInstanceResp{inst})
+					newShard["volume_type"] = dbImportedStatus
 					if inst.WalVolume != nil {
 						newShard["wal_volume"] = flattenDatabaseClusterWalVolume(*inst.WalVolume)
 					}
@@ -241,6 +247,13 @@ func resourceDatabaseClusterWithShards() *schema.Resource {
 				Description: "Object that represents backup to restore instance from. **New since v.0.1.4**.",
 			},
 
+			"cloud_monitoring_enabled": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				ForceNew:    false,
+				Description: "Enable cloud monitoring for the cluster. Changing this for Redis or MongoDB creates a new instance. **New since v.0.2.0**",
+			},
+
 			"shard": {
 				Type:     schema.TypeList,
 				Required: true,
@@ -259,6 +272,16 @@ func resourceDatabaseClusterWithShards() *schema.Resource {
 							Required:    true,
 							ForceNew:    false,
 							Description: "The number of instances in the cluster shard.",
+						},
+
+						"shrink_options": {
+							Type:        schema.TypeList,
+							Optional:    true,
+							Elem:        &schema.Schema{Type: schema.TypeString},
+							Description: "Used only for shrinking cluster. List of IDs of instances that should remain after shrink. If no options are supplied, shrink operation will choose first non-leader instance to delete.",
+							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+								return true
+							},
 						},
 
 						"flavor_id": {
@@ -314,16 +337,32 @@ func resourceDatabaseClusterWithShards() *schema.Resource {
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{
 									"uuid": {
-										Type:        schema.TypeString,
-										Optional:    true,
-										ForceNew:    true,
-										Description: "The id of the network. Changing this creates a new cluster.",
+										Type:     schema.TypeString,
+										Optional: true,
+										ForceNew: true,
+										Description: "The id of the network. Changing this creates a new cluster." +
+											"**Note** Although this argument is marked as optional, it is actually required at the moment. Not setting a value for it may cause an error.",
 									},
 									"port": {
 										Type:        schema.TypeString,
 										Optional:    true,
 										ForceNew:    true,
-										Description: "The port id of the network. Changing this creates a new cluster.",
+										Description: "The port id of the network. Changing this creates a new cluster. ***Deprecated*** This argument is deprecated, please do not use it.",
+										Deprecated:  "This argument is deprecated, please do not use it.",
+									},
+									"subnet_id": {
+										Type:        schema.TypeString,
+										Optional:    true,
+										ForceNew:    true,
+										Description: "The id of the subnet. Changing this creates a new cluster. **New since v.0.1.15**.",
+									},
+									"security_groups": {
+										Type:        schema.TypeSet,
+										Optional:    true,
+										ForceNew:    true,
+										Elem:        &schema.Schema{Type: schema.TypeString},
+										Set:         schema.HashString,
+										Description: "An array of one or more security group IDs to associate with the shard instances. Changing this creates a new cluster. **New since v.0.2.0**.",
 									},
 								},
 								Description: "Object that represents network of the cluster shard. Changing this creates a new cluster.",
@@ -336,6 +375,29 @@ func resourceDatabaseClusterWithShards() *schema.Resource {
 							Computed:    false,
 							ForceNew:    true,
 							Description: "The name of the availability zone of the cluster shard. Changing this creates a new cluster.",
+						},
+
+						"instances": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"instance_id": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "The id of the instance.",
+									},
+									"ip": {
+										Type:     schema.TypeList,
+										Computed: true,
+										Elem: &schema.Schema{
+											Type: schema.TypeString,
+										},
+										Description: "IP address of the instance.",
+									},
+								},
+							},
+							Description: "Shard instances info. **New since v.0.1.15**.",
 						},
 					},
 				},
@@ -354,8 +416,9 @@ func resourceDatabaseClusterWithShardsCreate(ctx context.Context, d *schema.Reso
 	}
 
 	createOpts := &dbClusterCreateOpts{
-		Name:              d.Get("name").(string),
-		FloatingIPEnabled: d.Get("floating_ip_enabled").(bool),
+		Name:                   d.Get("name").(string),
+		FloatingIPEnabled:      d.Get("floating_ip_enabled").(bool),
+		CloudMonitoringEnabled: d.Get("cloud_monitoring_enabled").(bool),
 	}
 
 	message := "unable to determine vkcs_db_cluster_with_shards"
@@ -414,7 +477,7 @@ func resourceDatabaseClusterWithShardsCreate(ctx context.Context, d *schema.Reso
 		instanceCount += shardSize
 		volumeSize := shardMap["volume_size"].(int)
 		shardInfo[i].Volume = &volume{Size: &volumeSize, VolumeType: shardMap["volume_type"].(string)}
-		shardInfo[i].Nics, _ = extractDatabaseNetworks(shardMap["network"].([]interface{}))
+		shardInfo[i].Nics, shardInfo[i].SecurityGroups, _ = extractDatabaseNetworks(shardMap["network"].([]interface{}))
 		shardInfo[i].AvailabilityZone = shardMap["availability_zone"].(string)
 		shardInfo[i].FlavorRef = shardMap["flavor_id"].(string)
 		shardInfo[i].ShardID = shardMap["shard_id"].(string)
@@ -520,111 +583,164 @@ func resourceDatabaseClusterWithShardsRead(ctx context.Context, d *schema.Resour
 		d.Set("wal_disk_autoexpand", flattenDatabaseInstanceAutoExpand(cluster.WalAutoExpand, cluster.WalMaxDiskSize))
 	}
 
-	return nil
+	hasChanges := d.HasChangesExcept()
+
+	var diags diag.Diagnostics
+
+	shardsInstances := getDatabaseClusterShardInstances(cluster.Instances)
+	flattenedShards := flattenDatabaseClusterShards(shardsInstances)
+	// Workaround to persist user order of shards
+	sort.Slice(flattenedShards, func(i, j int) bool {
+		return flattenedShards[i]["shard_id"].(string) < flattenedShards[j]["shard_id"].(string)
+	})
+
+	rawShards := d.Get("shard").([]interface{})
+	shards := make([]map[string]interface{}, 0, len(flattenedShards))
+	newShards := make([]map[string]interface{}, 0, len(flattenedShards))
+
+OuterLoop:
+	for _, fSh := range flattenedShards {
+		for _, rawSh := range rawShards {
+			rawShMap := rawSh.(map[string]interface{})
+			if fSh["shard_id"].(string) == rawShMap["shard_id"].(string) {
+				shards = append(shards, fSh)
+				continue OuterLoop
+			}
+		}
+		newShards = append(newShards, fSh)
+	}
+
+	shards = append(shards, newShards...)
+	for i := range shards {
+		shards[i]["availability_zone"] = d.Get(fmt.Sprintf("shard.%d.availability_zone", i))
+		shards[i]["network"] = d.Get(fmt.Sprintf("shard.%d.network", i))
+
+		// Workaround since we don't retrieve info about volume_type
+		// NOTE: remove this when add getting info about volumes from
+		// blockstorage service
+		if v, ok := d.GetOk(fmt.Sprintf("shard.%d.volume_type", i)); ok {
+			shards[i]["volume_type"] = v
+		}
+		if v, ok := d.GetOk(fmt.Sprintf("shard.%d.wal_volume.volume_type", i)); ok {
+			if wV, ok := shards[i]["wal_volume"]; ok {
+				m := wV.(map[string]interface{})
+				m["volume_type"] = v
+				shards[i]["wal_volume"] = m
+			}
+		}
+
+		rawNetworks := shards[i]["network"].([]interface{})
+		p := cty.Path{
+			cty.GetAttrStep{Name: "shard"},
+			cty.IndexStep{Key: cty.NumberIntVal(int64(i))},
+			cty.GetAttrStep{Name: "network"},
+		}
+		if hasChanges {
+			diags = checkDBNetworks(rawNetworks, p, diags)
+		}
+	}
+
+	log.Printf("[DEBUG] Retrieved shards for vkcs_db_cluster_with_shards %s: %#v", d.Id(), flattenedShards)
+
+	d.Set("shard", shards)
+	return diags
 }
 
 func resourceDatabaseClusterWithShardsUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	config := meta.(configer)
-	DatabaseV1Client, err := config.DatabaseV1Client(getRegion(d, config))
+	dbClient, err := config.DatabaseV1Client(getRegion(d, config))
 	if err != nil {
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
+	clusterID := d.Id()
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{string(dbClusterStatusBuild)},
 		Target:     []string{string(dbClusterStatusActive)},
-		Refresh:    databaseClusterStateRefreshFunc(DatabaseV1Client, d.Id(), nil),
+		Refresh:    databaseClusterStateRefreshFunc(dbClient, clusterID, nil),
 		Timeout:    d.Timeout(schema.TimeoutCreate),
 		Delay:      dbInstanceDelay,
 		MinTimeout: dbInstanceMinTimeout,
 	}
+	updateCtx := &dbResourceUpdateContext{
+		Ctx:       ctx,
+		Client:    dbClient,
+		D:         d,
+		StateConf: stateConf,
+	}
 
 	if d.HasChange("configuration_id") {
-		old, new := d.GetChange("configuration_id")
-
-		var detachConfigurationOpts dbClusterDetachConfigurationGroupOpts
-		detachConfigurationOpts.ConfigurationDetach.ConfigurationID = old.(string)
-		err := dbClusterAction(DatabaseV1Client, d.Id(), &detachConfigurationOpts).ExtractErr()
+		err = databaseClusterActionUpdateConfiguration(updateCtx)
 		if err != nil {
-			return diag.FromErr(err)
-		}
-		log.Printf("Detaching configuration %s from vkcs_db_cluster_with_shards %s", old, d.Id())
-
-		_, err = stateConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster_with_shards %s to become ready: %s", d.Id(), err)
-		}
-
-		if new != "" {
-			var attachConfigurationOpts dbClusterAttachConfigurationGroupOpts
-			attachConfigurationOpts.ConfigurationAttach.ConfigurationID = new.(string)
-			err := dbClusterAction(DatabaseV1Client, d.Id(), &attachConfigurationOpts).ExtractErr()
-			if err != nil {
-				return diag.FromErr(err)
-			}
-			log.Printf("Attaching configuration %s to vkcs_db_cluster_with_shards %s", new, d.Id())
-
-			_, err = stateConf.WaitForStateContext(ctx)
-			if err != nil {
-				return diag.Errorf("error waiting for vkcs_db_cluster_with_shards %s to become ready: %s", d.Id(), err)
-			}
+			return databaseClusterWithShardsUpdateProcessError(err, clusterID, "")
 		}
 	}
 
 	if d.HasChange("disk_autoexpand") {
-		_, new := d.GetChange("disk_autoexpand")
-		autoExpandProperties, err := extractDatabaseAutoExpand(new.([]interface{}))
+		err = databaseClusterUpdateDiskAutoexpand(updateCtx)
 		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster_with_shards disk_autoexpand")
+			return databaseClusterWithShardsUpdateProcessError(err, clusterID, "")
 		}
-		var autoExpandOpts dbClusterUpdateAutoExpandOpts
-		if autoExpandProperties.AutoExpand {
-			autoExpandOpts.Cluster.VolumeAutoresizeEnabled = 1
-		} else {
-			autoExpandOpts.Cluster.VolumeAutoresizeEnabled = 0
-		}
-		autoExpandOpts.Cluster.VolumeAutoresizeMaxSize = autoExpandProperties.MaxDiskSize
-		err = dbClusterUpdateAutoExpand(DatabaseV1Client, d.Id(), &autoExpandOpts).ExtractErr()
-		if err != nil {
-			return diag.FromErr(err)
-		}
+	}
 
-		stateConf.Pending = []string{string(dbClusterStatusUpdating)}
-		stateConf.Target = []string{string(dbClusterStatusActive)}
-
-		_, err = stateConf.WaitForStateContext(ctx)
+	if d.HasChange("wal_disk_autoexpand") {
+		err = databaseClusterUpdateWalDiskAutoexpand(updateCtx)
 		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster_with_shards %s to become ready: %s", d.Id(), err)
+			return databaseClusterWithShardsUpdateProcessError(err, clusterID, "")
 		}
 	}
 
 	if d.HasChange("capabilities") {
-		_, newCapabilities := d.GetChange("capabilities")
-		newCapabilitiesOpts, err := extractDatabaseCapabilities(newCapabilities.([]interface{}))
+		err = databaseClusterActionApplyCapabilities(updateCtx)
 		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster_with_shards capability")
+			return databaseClusterWithShardsUpdateProcessError(err, clusterID, "")
 		}
-		var applyCapabilityOpts dbClusterApplyCapabilityOpts
-		applyCapabilityOpts.ApplyCapability.Capabilities = newCapabilitiesOpts
+	}
 
-		err = dbClusterAction(DatabaseV1Client, d.Id(), &applyCapabilityOpts).ExtractErr()
-
+	if d.HasChange("cloud_monitoring_enabled") {
+		err = databaseClusterUpdateCloudMonitoring(updateCtx)
 		if err != nil {
-			return diag.Errorf("error applying capability to vkcs_db_cluster_with_shards %s: %s", d.Id(), err)
+			return databaseClusterWithShardsUpdateProcessError(err, clusterID, "")
+		}
+	}
+
+	shardsRaw := d.Get("shard").([]interface{})
+	for i, shardRaw := range shardsRaw {
+		shard := shardRaw.(map[string]interface{})
+		shardID := shard["shard_id"].(string)
+		pathPrefix := fmt.Sprintf("shard.%d.", i)
+
+		if p := pathPrefix + "volume_size"; d.HasChange(p) {
+			err = databaseClusterActionResizeVolume(updateCtx, shardID)
+			if err != nil {
+				return databaseClusterWithShardsUpdateProcessError(err, clusterID, shardID)
+			}
 		}
 
-		applyCapabilityClusterConf := &resource.StateChangeConf{
-			Pending:    []string{string(dbClusterStatusCapabilityApplying), string(dbClusterStatusBuild)},
-			Target:     []string{string(dbClusterStatusActive)},
-			Refresh:    databaseClusterStateRefreshFunc(DatabaseV1Client, d.Id(), &newCapabilitiesOpts),
-			Timeout:    d.Timeout(schema.TimeoutCreate),
-			Delay:      dbInstanceDelay,
-			MinTimeout: dbInstanceMinTimeout,
+		if p := pathPrefix + "wal_volume"; d.HasChange(p) {
+			err = databaseClusterActionResizeWalVolume(updateCtx, shardID)
+			if err != nil {
+				return databaseClusterWithShardsUpdateProcessError(err, clusterID, shardID)
+			}
 		}
-		log.Printf("[DEBUG] Waiting for cluster to become ready after applying capability")
-		_, err = applyCapabilityClusterConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error applying capability to vkcs_db_cluster_with_shards %s: %s", d.Id(), err)
+
+		if p := pathPrefix + "flavor_id"; d.HasChange(p) {
+			err = databaseClusterActionResizeFlavor(updateCtx, shardID)
+			if err != nil {
+				return databaseClusterWithShardsUpdateProcessError(err, clusterID, shardID)
+			}
+		}
+
+		if p := pathPrefix + "size"; d.HasChange(p) {
+			old, new := d.GetChange(p)
+			if sizeChange := new.(int) - old.(int); sizeChange > 0 {
+				err = databaseClusterActionGrow(updateCtx, shardID)
+			} else if sizeChange < 0 {
+				err = databaseClusterActionShrink(updateCtx, shardID)
+			}
+			if err != nil {
+				return databaseClusterWithShardsUpdateProcessError(err, clusterID, shardID)
+			}
 		}
 	}
 
@@ -658,4 +774,58 @@ func resourceDatabaseClusterWithShardsDelete(ctx context.Context, d *schema.Reso
 	}
 
 	return nil
+}
+
+func databaseClusterWithShardsUpdateProcessError(err error, clusterID string, shardID string) diag.Diagnostics {
+	baseErr := err
+	if unwrappedErr := errors.Unwrap(err); unwrappedErr != nil {
+		baseErr = unwrappedErr
+	}
+
+	newErrMsg := baseErr.Error()
+	switch baseErr {
+	case errDBClusterNotFound:
+		newErrMsg = fmt.Sprintf("error retrieving vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterShardNotFound:
+		newErrMsg = fmt.Sprintf("unable to extract shard from vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterUpdateWait:
+		newErrMsg = fmt.Sprintf("error waiting for vkcs_db_cluster_with_shards %s to become ready", clusterID)
+
+	case errDBClusterUpdateDiskAutoexpand:
+		newErrMsg = fmt.Sprintf("error updating disk_autoexpand for vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterUpdateDiskAutoexpandExtract:
+		newErrMsg = fmt.Sprintf("unable to determine disk_autoexpand fron vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterUpdateWalDiskAutoexpand:
+		newErrMsg = fmt.Sprintf("error updating wal_disk_autoexpand for vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterUpdateWalDiskAutoexpandExtract:
+		newErrMsg = fmt.Sprintf("unable to determine wal_disk_autoexpand from vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterUpdateCloudMonitoring:
+		newErrMsg = fmt.Sprintf("error updating cloud_monitoring_enabled for vkcs_db_cluster_with_shards %s", clusterID)
+
+	case errDBClusterActionUpdateConfiguration:
+		newErrMsg = fmt.Sprintf("error updating configuration for vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterActionApplyCapabitilies:
+		newErrMsg = fmt.Sprintf("error updating capabilities for vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterActionApplyCapabilitiesExtract:
+		newErrMsg = fmt.Sprintf("error extracting capabilities for vkcs_db_cluster_with_shards %s", clusterID)
+	case errDBClusterActionResizeWalVolumeExtract:
+		newErrMsg = fmt.Sprintf("unable to determine wal_volume from shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionGrow:
+		newErrMsg = fmt.Sprintf("error growing shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionShrink:
+		newErrMsg = fmt.Sprintf("error shrinking shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionShrinkWrongOptions:
+		newErrMsg = fmt.Sprintf("invalid shrink options for shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionShrinkInstancesExtract:
+		newErrMsg = fmt.Sprintf("error determining instances to shrink shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionResizeVolume:
+		newErrMsg = fmt.Sprintf("error resizing volume for shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionResizeWalVolume:
+		newErrMsg = fmt.Sprintf("error resizing wal_volume for shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	case errDBClusterActionResizeFlavor:
+		newErrMsg = fmt.Sprintf("error changing flavor for shard %s of vkcs_db_cluster_with_shards %s", shardID, clusterID)
+	}
+
+	errMsg := strings.Replace(err.Error(), baseErr.Error(), newErrMsg, 1)
+	return diag.Errorf(errMsg)
 }

@@ -44,8 +44,7 @@ resource "vkcs_db_instance" "db-instance" {
   }
 
   depends_on = [
-    vkcs_networking_network.db,
-    vkcs_networking_subnet.db
+    vkcs_networking_router_interface.db
   ]
 }
 
@@ -65,14 +64,7 @@ resource "vkcs_db_backup" "db-backup" {
 
 
 ## Attributes Reference
-- `dbms_id` **String** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `container_prefix` **String** See Argument Reference above.
-
-- `description` **String** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `created` **String** Backup creation timestamp
 
 - `datastore` **Object** Object that represents datastore of backup

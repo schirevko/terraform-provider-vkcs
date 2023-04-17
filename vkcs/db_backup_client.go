@@ -19,19 +19,19 @@ type dbBackupCreateOpts struct {
 }
 
 type dbBackupResp struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	LocationRef string     `json:"location_ref"`
-	InstanceID  string     `json:"instance_id"`
-	ClusterID   string     `json:"cluster_id"`
-	Created     string     `json:"created"`
-	Updated     string     `json:"updated"`
-	Size        float64    `json:"size"`
-	WalSize     float64    `json:"wal_size"`
-	Status      string     `json:"status"`
-	Datastore   *dataStore `json:"datastore"`
-	Meta        string     `json:"meta"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	LocationRef string          `json:"location_ref"`
+	InstanceID  string          `json:"instance_id"`
+	ClusterID   string          `json:"cluster_id"`
+	Created     string          `json:"created"`
+	Updated     string          `json:"updated"`
+	Size        float64         `json:"size"`
+	WalSize     float64         `json:"wal_size"`
+	Status      string          `json:"status"`
+	Datastore   *dataStoreShort `json:"datastore"`
+	Meta        string          `json:"meta"`
 }
 
 type dbBackupRespOpts struct {
@@ -72,7 +72,7 @@ func dbBackupCreate(client databaseClient, opts optsBuilder) (r getDBBackupResul
 		return
 	}
 	var result *http.Response
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	result, r.Err = client.Post(baseURL(client, dbBackupsAPIPath), b, &r.Body, reqOpts)
 	if r.Err == nil {
 		r.Header = result.Header
@@ -81,7 +81,7 @@ func dbBackupCreate(client databaseClient, opts optsBuilder) (r getDBBackupResul
 }
 
 func dbBackupGet(client databaseClient, id string) (r getDBBackupResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(getURL(client, dbBackupsAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {
@@ -91,7 +91,7 @@ func dbBackupGet(client databaseClient, id string) (r getDBBackupResult) {
 }
 
 func dbBackupDelete(client databaseClient, id string) (r deleteDBBackupResult) {
-	reqOpts := getDBRequestOpts()
+	reqOpts := getRequestOpts()
 	var result *http.Response
 	result, r.Err = client.Delete(getURL(client, dbBackupsAPIPath, id), reqOpts)
 	if r.Err == nil {

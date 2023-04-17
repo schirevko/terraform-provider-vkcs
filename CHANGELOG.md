@@ -7,7 +7,45 @@ description: |-
 
 # VKCS Provider's changelog
 
-#### v0.1.13 (unreleased)
+#### v0.2.1
+- Support shards/instances/volumes resizing in DB cluster with shards
+- Fix reading state of DB cluster with shards
+
+#### v0.2.0
+- Provide support for Public DNS service
+- Add datasources for DB datastores
+- Add datasources for DB datastore capabilities and configuration parameters
+- Support cloud monitoring for DB instances/clusters
+- Add security_group argument to DB instance/cluster resources
+- Fix searching of shared network with datasource
+
+#### v0.1.16
+- Add config option to run against clouds with old cloud containers API
+
+#### v0.1.15
+- Fix error of incorrect setting a value of resource_vkcs_compute_instance.access_ip_v4 to an empty string
+- Add "subnet_id" argument to resource_vkcs_db_instance.network, resource_vkcs_db_cluster.network, and resource_vkcs_db_cluster_with_shards.shard.network
+- Add a warning that is thrown when arguments "network.fixed_ip_v4" and "replica_of" of resource_vkcs_db_instance are set simultaneously
+- Deprecate "port" argument of resource_vkcs_db_instance.network, resource_vkcs_db_cluster.network, and resource_vkcs_db_cluster_with_shards.shard.network
+- Fix error of not resolving referenced network resources that were created with sdn = "sprut"
+- Deprecate "security_group_ids" argument of resource_vkcs_lb_loadbalancer
+- Add "instances" computed attribute to resource_vkcs_db_cluster_with_shards.shard
+- Add "loadbalancer_id" computed attribute to resource_vkcs_db_cluster
+- Fix error of not expecting "retyping" status when modifying resource_vkcs_blockstorage_volume.volume_type
+- Add vkcs_lb_loadbalancer datasource
+- Make "export_location_path" attribute of data_source_vkcs_sharedfilesystem_share computed
+- Add "export_location_path" computed attribute to resource_vkcs_sharedfilesystem_share
+- Fix error of ignoring "restore_point" argument in resource_vkcs_db_instance and resource_vkcs_db_cluster
+
+#### v0.1.14
+- Add "instances" computed field to resource_vkcs_kubernetes_cluster
+- Add ability to control which cluster instances should remain after shrinking cluster via "shrink_options" field of resource_vkcs_kubernetes_cluster
+- Add "ip" computed field to resource_vkcs_db_instance
+- Allow creation of resource_vkcs_images_image in clouds without s3 support
+- Added description for cluster_node_volume_type labels field in resource_vkcs_kubernetes_cluster
+
+#### v0.1.13
+- Updated description for labels field in resource_vkcs_kubernetes_cluster 
 - Added conflicts_with property to remote_group_id and remote_ip_prefix fields of resource_vkcs_networking_secgroup_rule
 - Added deprecation warning to ethertype field of resource_vkcs_networking_secgroup_rule
 - Removed dns_name and dns_domain attributes from resource_vkcs_networking_floatingip

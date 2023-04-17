@@ -217,10 +217,7 @@ resource "vkcs_db_instance" "basic" {
     autoexpand = true
     max_disk_size = 1000
   }
-  depends_on = [
-    vkcs_networking_network.base,
-    vkcs_networking_subnet.base
-  ]
+  depends_on = [vkcs_networking_router_interface.base]
 }
 `
 
@@ -244,15 +241,13 @@ resource "vkcs_db_instance" "basic" {
   }
   availability_zone = "{{.AvailabilityZone}}"
   floating_ip_enabled = true
+  cloud_monitoring_enabled = true
 
   disk_autoexpand {
     autoexpand = true
     max_disk_size = 2000
   }
-  depends_on = [
-    vkcs_networking_network.base,
-    vkcs_networking_subnet.base
-  ]
+  depends_on = [vkcs_networking_router_interface.base]
 
 }
 `
@@ -276,10 +271,7 @@ resource "vkcs_db_instance" "basic" {
     uuid = vkcs_networking_network.base.id
   }
   root_enabled = true
-  depends_on = [
-    vkcs_networking_network.base,
-    vkcs_networking_subnet.base
-  ]
+  depends_on = [vkcs_networking_router_interface.base]
 }
 `
 
@@ -319,5 +311,6 @@ resource "vkcs_db_instance" "basic" {
 	  max_disk_size = 1000
   }
 
+  depends_on = [vkcs_networking_router_interface.base]
 }
 `

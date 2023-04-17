@@ -87,6 +87,33 @@ func TestAccDatabaseCluster_wal_no_update(t *testing.T) {
 	})
 }
 
+func TestAccDatabaseCluster_shrink(t *testing.T) {
+	var cluster dbClusterResp
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:          func() { testAccPreCheck(t) },
+		ProviderFactories: testAccProviders,
+		CheckDestroy:      testAccCheckDatabaseClusterDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRenderConfig(testAccDatabaseClusterShrinkInitial),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckDatabaseClusterExists(
+						"vkcs_db_cluster.basic", &cluster),
+				),
+			},
+			{
+				Config: testAccRenderConfig(testAccDatabaseClusterShrinkUpdated),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckDatabaseClusterExists(
+						"vkcs_db_cluster.basic", &cluster),
+					testAccCheckDatabaseClusterLeaderExists(&cluster),
+				),
+			},
+		},
+	})
+}
+
 func testAccCheckDatabaseClusterExists(n string, cluster *dbClusterResp) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
@@ -140,6 +167,17 @@ func testAccCheckDatabaseClusterDestroy(s *terraform.State) error {
 	return nil
 }
 
+func testAccCheckDatabaseClusterLeaderExists(cluster *dbClusterResp) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		for _, inst := range cluster.Instances {
+			if inst.Role == dbClusterInstanceRoleLeader {
+				return nil
+			}
+		}
+		return fmt.Errorf("cluster leader instance is absent")
+	}
+}
+
 const testAccDatabaseClusterBasic = `
 {{.BaseNetwork}}
 {{.BaseFlavor}}
@@ -162,8 +200,7 @@ const testAccDatabaseClusterBasic = `
    availability_zone = "{{.AvailabilityZone}}"
 
    depends_on = [
-    vkcs_networking_network.base,
-    vkcs_networking_subnet.base
+    vkcs_networking_router_interface.base
   ]
  }
 `
@@ -175,6 +212,7 @@ const testAccDatabaseClusterUpdate = `
 resource "vkcs_db_cluster" "basic" {
 	name      = "basic"
 	flavor_id = data.vkcs_compute_flavor.base.id
+	cloud_monitoring_enabled = true
 	volume_size      = 9
 	volume_type = "{{.VolumeType}}"
 	cluster_size = 3
@@ -189,10 +227,7 @@ resource "vkcs_db_cluster" "basic" {
 	 
 	availability_zone = "{{.AvailabilityZone}}"
 
-	depends_on = [
-		vkcs_networking_network.base,
-		vkcs_networking_subnet.base
-	  ]
+	depends_on = [vkcs_networking_router_interface.base]
   }
 `
 
@@ -227,9 +262,54 @@ const testAccDatabaseClusterWal = `
 	max_disk_size = 1000
    }
 
-   depends_on = [
-    vkcs_networking_network.base,
-    vkcs_networking_subnet.base
-  ]
+   depends_on = [vkcs_networking_router_interface.base]
+ }
+`
+
+const testAccDatabaseClusterShrinkInitial = `
+{{.BaseNetwork}}
+				
+{{.BaseFlavor}}
+
+ resource "vkcs_db_cluster" "basic" {
+   name      = "basic"
+   flavor_id = data.vkcs_compute_flavor.base.id
+   volume_size      = 8
+   volume_type = "ceph-ssd"
+   cluster_size = 4
+   datastore {
+	version = "13"
+	type    = "postgresql"
+  }
+   network {
+     uuid = vkcs_networking_network.base.id
+   }
+	
+   availability_zone = "GZ1"
+   depends_on = [vkcs_networking_router_interface.base]
+ }
+`
+
+var testAccDatabaseClusterShrinkUpdated = `
+{{.BaseNetwork}}
+				
+{{.BaseFlavor}}
+
+ resource "vkcs_db_cluster" "basic" {
+   name      = "basic"
+   flavor_id = data.vkcs_compute_flavor.base.id
+   volume_size      = 8
+   volume_type = "ceph-ssd"
+   cluster_size = 3
+   datastore {
+	version = "13"
+	type    = "postgresql"
+  }
+   network {
+     uuid = vkcs_networking_network.base.id
+   }
+	
+   availability_zone = "GZ1"
+   depends_on = [vkcs_networking_router_interface.base]
  }
 `

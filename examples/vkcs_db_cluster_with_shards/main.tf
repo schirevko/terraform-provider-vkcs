@@ -6,6 +6,8 @@ resource "vkcs_db_cluster_with_shards" "db-cluster-with-shards" {
     version = "20.8"
   }
 
+  cloud_monitoring_enabled = true
+
   shard {
     availability_zone = "GZ1"
     size        = 1
@@ -17,6 +19,7 @@ resource "vkcs_db_cluster_with_shards" "db-cluster-with-shards" {
 
     network {
       uuid = vkcs_networking_network.db.id
+      security_groups = [vkcs_networking_secgroup.secgroup.id]
     }
   }
 
@@ -25,17 +28,33 @@ resource "vkcs_db_cluster_with_shards" "db-cluster-with-shards" {
     size        = 1
     shard_id    = "shard1"
     flavor_id   = data.vkcs_compute_flavor.db.id
-    
+
     volume_size = 8
     volume_type = "ceph-ssd"
 
     network {
       uuid = vkcs_networking_network.db.id
+      security_groups = [vkcs_networking_secgroup.secgroup.id]
     }
   }
 
   depends_on = [
-    vkcs_networking_network.db,
-    vkcs_networking_subnet.db
+    vkcs_networking_router_interface.db,
+    vkcs_networking_secgroup.secgroup
   ]
+}
+
+locals {
+  cluster = vkcs_db_cluster_with_shards.db-cluster-with-shards
+  shards_ips = {
+    for shard in local.cluster.shard : shard.shard_id => [for i in shard.instances : {
+      "internal_ip" = i.ip[0]
+      "external_ip" = length(i.ip) > 1 ? i.ip[1] : null
+    }]
+  }
+}
+
+output "shard0-ips" {
+  value = local.shards_ips["shard0"]
+  description = "IPs of instances in shard with \"id\" = \"shard0\""
 }

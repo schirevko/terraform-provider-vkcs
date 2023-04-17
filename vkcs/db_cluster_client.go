@@ -13,17 +13,18 @@ type dbCluster struct {
 
 // dbClusterCreateOpts represents database cluster creation parameters
 type dbClusterCreateOpts struct {
-	Name              string                        `json:"name" required:"true"`
-	Datastore         *dataStore                    `json:"datastore" required:"true"`
-	FloatingIPEnabled bool                          `json:"allow_remote_access,omitempty"`
-	AutoExpand        int                           `json:"volume_autoresize_enabled,omitempty"`
-	MaxDiskSize       int                           `json:"volume_autoresize_max_size,omitempty"`
-	WalAutoExpand     int                           `json:"wal_autoresize_enabled,omitempty"`
-	WalMaxDiskSize    int                           `json:"wal_autoresize_max_size,omitempty"`
-	Instances         []dbClusterInstanceCreateOpts `json:"instances"`
-	Capabilities      []instanceCapabilityOpts      `json:"capabilities,omitempty"`
-	RestorePoint      *restorePoint                 `json:"restore_point,omitempty"`
-	BackupSchedule    *backupSchedule               `json:"backup_schedule,omitempty"`
+	Name                   string                        `json:"name" required:"true"`
+	Datastore              *dataStoreShort               `json:"datastore" required:"true"`
+	FloatingIPEnabled      bool                          `json:"allow_remote_access,omitempty"`
+	AutoExpand             int                           `json:"volume_autoresize_enabled,omitempty"`
+	MaxDiskSize            int                           `json:"volume_autoresize_max_size,omitempty"`
+	WalAutoExpand          int                           `json:"wal_autoresize_enabled,omitempty"`
+	WalMaxDiskSize         int                           `json:"wal_autoresize_max_size,omitempty"`
+	Instances              []dbClusterInstanceCreateOpts `json:"instances"`
+	Capabilities           []instanceCapabilityOpts      `json:"capabilities,omitempty"`
+	RestorePoint           *restorePoint                 `json:"restorePoint,omitempty"`
+	BackupSchedule         *backupSchedule               `json:"backup_schedule,omitempty"`
+	CloudMonitoringEnabled bool                          `json:"cloud_monitoring_enabled,omitempty"`
 }
 
 // dbClusterInstanceCreateOpts represents database cluster instance creation parameters
@@ -35,6 +36,7 @@ type dbClusterInstanceCreateOpts struct {
 	Volume           *volume       `json:"volume" required:"true"`
 	Walvolume        *walVolume    `json:"wal_volume,omitempty"`
 	ShardID          string        `json:"shard_id,omitempty"`
+	SecurityGroups   []string      `json:"security_groups,omitempty"`
 }
 
 // dbClusterAttachConfigurationGroupOpts represents parameters of configuration group to be attached to database cluster
@@ -57,6 +59,7 @@ type dbClusterResizeVolumeOpts struct {
 		Volume struct {
 			Size int `json:"size"`
 		} `json:"volume"`
+		ShardID string `json:"shard_id,omitempty"`
 	} `json:"resize"`
 }
 
@@ -67,6 +70,7 @@ type dbClusterResizeWalVolumeOpts struct {
 			Size int    `json:"size"`
 			Kind string `json:"kind"`
 		} `json:"volume"`
+		ShardID string `json:"shard_id,omitempty"`
 	} `json:"resize"`
 }
 
@@ -74,6 +78,7 @@ type dbClusterResizeWalVolumeOpts struct {
 type dbClusterResizeOpts struct {
 	Resize struct {
 		FlavorRef string `json:"flavorRef"`
+		ShardID   string `json:"shard_id,omitempty"`
 	} `json:"resize"`
 }
 
@@ -114,6 +119,7 @@ type dbClusterGrowOpts struct {
 	FlavorRef        string     `json:"flavorRef" required:"true"`
 	Volume           *volume    `json:"volume" required:"true"`
 	Walvolume        *walVolume `json:"wal_volume,omitempty"`
+	ShardID          string     `json:"shard_id,omitempty"`
 }
 
 // dbClusterShrinkClusterOpts is used to send proper request to shrink database cluster
@@ -130,7 +136,7 @@ type dbClusterShrinkOpts struct {
 type dbClusterResp struct {
 	ConfigurationID string                  `json:"configuration_id"`
 	Created         dateTimeWithoutTZFormat `json:"created"`
-	DataStore       *dataStore              `json:"datastore"`
+	DataStore       *dataStoreShort         `json:"datastore"`
 	HealthStatus    string                  `json:"health_status"`
 	ID              string                  `json:"id"`
 	Instances       []dbClusterInstanceResp `json:"instances"`
@@ -151,6 +157,7 @@ type dbClusterInstanceResp struct {
 	Flavor            *links     `json:"flavor"`
 	GaVersion         string     `json:"ga_version"`
 	ID                string     `json:"id"`
+	IP                *[]string  `json:"ip"`
 	Links             *[]link    `json:"links"`
 	Name              string     `json:"name"`
 	Role              string     `json:"role"`
@@ -301,7 +308,7 @@ func dbClusterCreate(client databaseClient, opts optsBuilder) (r createClusterRe
 		return
 	}
 	var result *http.Response
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	result, r.Err = client.Post(baseURL(client, dbClustersAPIPath), b, &r.Body, reqOpts)
 	if r.Err == nil {
 		r.Header = result.Header
@@ -311,7 +318,7 @@ func dbClusterCreate(client databaseClient, opts optsBuilder) (r createClusterRe
 
 // dbClusterGet performs request to get database cluster
 func dbClusterGet(client databaseClient, id string) (r getClusterResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(getURL(client, dbClustersAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {
@@ -321,7 +328,7 @@ func dbClusterGet(client databaseClient, id string) (r getClusterResult) {
 }
 
 func dbClusterDelete(client databaseClient, id string) (r deleteClusterResult) {
-	reqOpts := getDBRequestOpts()
+	reqOpts := getRequestOpts()
 	var result *http.Response
 	result, r.Err = client.Delete(getURL(client, dbClustersAPIPath, id), reqOpts)
 	if r.Err == nil {
@@ -337,7 +344,7 @@ func dbClusterAction(client databaseClient, id string, opts optsBuilder) (r clus
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Post(getURL(client, dbClustersAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -353,7 +360,7 @@ func dbClusterUpdateAutoExpand(client databaseClient, id string, opts optsBuilde
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Patch(getURL(client, dbClustersAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -368,7 +375,7 @@ func dbClusterUpdateBackupSchedule(client databaseClient, id string, opts optsBu
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Put(backupScheduleURL(client, clustersAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -378,7 +385,7 @@ func dbClusterUpdateBackupSchedule(client databaseClient, id string, opts optsBu
 }
 
 func dbClusterGetBackupSchedule(client databaseClient, id string) (r getClusterBackupScheduleResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(backupScheduleURL(client, clustersAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {

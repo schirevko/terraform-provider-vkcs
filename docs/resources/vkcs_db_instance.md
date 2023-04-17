@@ -23,7 +23,8 @@ resource "vkcs_db_instance" "db-instance" {
   }
 
   flavor_id   = data.vkcs_compute_flavor.db.id
-  
+  cloud_monitoring_enabled = true
+
   size        = 8
   volume_type = "ceph-ssd"
   disk_autoexpand {
@@ -33,6 +34,7 @@ resource "vkcs_db_instance" "db-instance" {
 
   network {
     uuid = vkcs_networking_network.db.id
+    security_groups = [vkcs_networking_secgroup.secgroup.id]
   }
 
   capabilities {
@@ -43,8 +45,8 @@ resource "vkcs_db_instance" "db-instance" {
   }
 
   depends_on = [
-    vkcs_networking_network.db,
-    vkcs_networking_subnet.db
+    vkcs_networking_router_interface.db,
+    vkcs_networking_secgroup.secgroup
   ]
 }
 ```
@@ -164,6 +166,8 @@ resource "vkcs_db_instance" "db-instance" {
 
   - `settings` <strong>Map of </strong>**String** (*Optional*) Map of key-value settings of the capability.
 
+- `cloud_monitoring_enabled` **Boolean** (*Optional*) Enable cloud monitoring for the instance. Changing this for Redis or MongoDB creates a new instance. **New since v.0.2.0**
+
 - `configuration_id` **String** (*Optional*) The id of the configuration attached to instance.
 
 - `disk_autoexpand` (*Optional*) Object that represents autoresize properties of the instance.
@@ -173,14 +177,20 @@ resource "vkcs_db_instance" "db-instance" {
 
 - `floating_ip_enabled` **Boolean** (*Optional*) Indicates whether floating ip is created for instance. Changing this creates a new instance.
 
+- `ip` **String** (*Optional*) IP address of the instance.
+
 - `keypair` **String** (*Optional*) Name of the keypair to be attached to instance. Changing this creates a new instance.
 
 - `network` (*Optional*) Object that represents network of the instance. Changing this creates a new instance.
-  - `fixed_ip_v4` **String** (*Optional*) The IPv4 address. Changing this creates a new instance.
+  - `fixed_ip_v4` **String** (*Optional*) The IPv4 address. Changing this creates a new instance. **Note** This argument conflicts with "replica_of". Setting both at the same time causes "fixed_ip_v4" to be ignored.
 
-  - `port` **String** (*Optional*) The port id of the network. Changing this creates a new instance.
+  - `port` **String** (*Optional* Deprecated) The port id of the network. Changing this creates a new instance. ***Deprecated*** This argument is deprecated, please do not use it.
 
-  - `uuid` **String** (*Optional*) The id of the network. Changing this creates a new instance.
+  - `security_groups` <strong>Set of </strong>**String** (*Optional*) An array of one or more security group IDs to associate with the instance. Changing this creates a new instance. **New since v.0.2.0**.
+
+  - `subnet_id` **String** (*Optional*) The id of the subnet. Changing this creates a new instance. **New since v.0.1.15**.
+
+  - `uuid` **String** (*Optional*) The id of the network. Changing this creates a new instance.**Note** Although this argument is marked as optional, it is actually required at the moment. Not setting a value for it may cause an error.
 
 - `region` **String** (*Optional*) Region to create resource in.
 
@@ -211,82 +221,7 @@ resource "vkcs_db_instance" "db-instance" {
 
 
 ## Attributes Reference
-- `datastore`  See Argument Reference above.
-  - `type` **String** See Argument Reference above.
-
-  - `version` **String** See Argument Reference above.
-
-- `flavor_id` **String** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `size` **Number** See Argument Reference above.
-
-- `volume_type` **String** See Argument Reference above.
-
-- `availability_zone` **String** See Argument Reference above.
-
-- `backup_schedule`  See Argument Reference above.
-  - `interval_hours` **Number** See Argument Reference above.
-
-  - `keep_count` **Number** See Argument Reference above.
-
-  - `name` **String** See Argument Reference above.
-
-  - `start_hours` **Number** See Argument Reference above.
-
-  - `start_minutes` **Number** See Argument Reference above.
-
-- `capabilities`  See Argument Reference above.
-  - `name` **String** See Argument Reference above.
-
-  - `settings` <strong>Map of </strong>**String** See Argument Reference above.
-
-- `configuration_id` **String** See Argument Reference above.
-
-- `disk_autoexpand`  See Argument Reference above.
-  - `autoexpand` **Boolean** See Argument Reference above.
-
-  - `max_disk_size` **Number** See Argument Reference above.
-
-- `floating_ip_enabled` **Boolean** See Argument Reference above.
-
-- `keypair` **String** See Argument Reference above.
-
-- `network`  See Argument Reference above.
-  - `fixed_ip_v4` **String** See Argument Reference above.
-
-  - `port` **String** See Argument Reference above.
-
-  - `uuid` **String** See Argument Reference above.
-
-- `region` **String** See Argument Reference above.
-
-- `replica_of` **String** See Argument Reference above.
-
-- `restore_point`  See Argument Reference above.
-  - `backup_id` **String** See Argument Reference above.
-
-  - `target` **String** See Argument Reference above.
-
-- `root_enabled` **Boolean** See Argument Reference above.
-
-- `root_password` **String** See Argument Reference above.
-
-- `wal_disk_autoexpand`  See Argument Reference above.
-  - `autoexpand` **Boolean** See Argument Reference above.
-
-  - `max_disk_size` **Number** See Argument Reference above.
-
-- `wal_volume`  See Argument Reference above.
-  - `size` **Number** See Argument Reference above.
-
-  - `volume_type` **String** See Argument Reference above.
-
-  - `autoexpand` **Boolean** See Argument Reference above.
-
-  - `max_disk_size` **Number** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `id` **String** ID of the resource.
 
 

@@ -64,7 +64,8 @@ func dataSourceDatabaseConfigGroup() *schema.Resource {
 				Description: "The description of the config group.",
 			},
 		},
-		Description: "Use this data source to get the information on a db config group resource.\n**New since v.0.1.7**.",
+		Description: "Use this data source to get the information on a db config group resource.\n" +
+			"**New since v.0.1.7**.",
 	}
 }
 
@@ -83,7 +84,7 @@ func dataSourceDatabaseConfigGroupRead(ctx context.Context, d *schema.ResourceDa
 	log.Printf("[DEBUG] Retrieved vkcs_db_config_group %s: %#v", configGroupID, configGroup)
 
 	d.Set("name", configGroup.Name)
-	ds := dataStore{
+	ds := dataStoreShort{
 		Type:    configGroup.DatastoreName,
 		Version: configGroup.DatastoreVersionName,
 	}

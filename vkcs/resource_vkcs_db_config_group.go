@@ -72,7 +72,8 @@ func resourceDatabaseConfigGroup() *schema.Resource {
 				Description: "Timestamp of config group's creation",
 			},
 		},
-		Description: "Provides a db config group resource. This can be used to create, update and delete db config group.\n**New since v.0.1.7**.",
+		Description: "Provides a db config group resource. This can be used to create, update and delete db config group.\n" +
+			"**New since v.0.1.7**.",
 	}
 }
 
@@ -134,7 +135,7 @@ func resourceDatabaseConfigGroupRead(ctx context.Context, d *schema.ResourceData
 	log.Printf("[DEBUG] Retrieved vkcs_db_config_group %s: %#v", d.Id(), configGroup)
 
 	d.Set("name", configGroup.Name)
-	ds := dataStore{
+	ds := dataStoreShort{
 		Type:    configGroup.DatastoreName,
 		Version: configGroup.DatastoreVersionName,
 	}

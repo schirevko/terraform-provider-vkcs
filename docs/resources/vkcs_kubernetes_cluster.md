@@ -12,7 +12,7 @@ Provides a kubernetes cluster resource. This can be used to create, modify and d
 ## Example Usage
 ```terraform
 data "vkcs_kubernetes_clustertemplate" "ct" {
-  version = "1.21.4"
+  version = "1.24"
 }
 
 resource "vkcs_kubernetes_cluster" "k8s-cluster" {
@@ -59,9 +59,16 @@ resource "vkcs_kubernetes_cluster" "k8s-cluster" {
 
 - `labels` <strong>Map of </strong>**String** (*Optional*) The list of optional key value pairs representing additional properties of the cluster. Changing this creates a new cluster.
 
+  * `calico_ipv4pool` to set subnet where pods will be created. Default 10.100.0.0/16.
+  * `clean_volumes` to remove pvc volumes when deleting a cluster. Default False.
+  * `cloud_monitoring` to enable cloud monitoring feature.
   * `docker_registry_enabled=true` to preinstall Docker Registry.
-  * `prometheus_monitoring=true` to preinstall monitoring system based on Prometheus and Grafana.
+  * `etcd_volume_size` to set etcd volume size. Default 10Gb.
   * `ingress_controller="nginx"` to preinstall NGINX Ingress Controller.
+  * `kube_log_level` to set log level for kubelet in range 0 to 8.
+  * `master_volume_size` to set master vm volume size. Default 50Gb.
+  * `cluster_node_volume_type` to set master vm volume type. Default ceph-hdd.
+  * `prometheus_monitoring=true` to preinstall monitoring system based on Prometheus and Grafana.
 
 - `loadbalancer_subnet_id` **String** (*Optional*) The UUID of the load balancer's subnet. Changing this creates new cluster.
 
@@ -79,46 +86,7 @@ resource "vkcs_kubernetes_cluster" "k8s-cluster" {
 
 
 ## Attributes Reference
-- `availability_zone` **String** See Argument Reference above.
-
-- `cluster_template_id` **String** See Argument Reference above.
-
-- `floating_ip_enabled` **Boolean** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `network_id` **String** See Argument Reference above.
-
-- `subnet_id` **String** See Argument Reference above.
-
-- `api_lb_fip` **String** See Argument Reference above.
-
-- `api_lb_vip` **String** See Argument Reference above.
-
-- `dns_domain` **String** See Argument Reference above.
-
-- `ingress_floating_ip` **String** See Argument Reference above.
-
-- `insecure_registries` **String** See Argument Reference above.
-
-- `keypair` **String** See Argument Reference above.
-
-- `labels` <strong>Map of </strong>**String** See Argument Reference above.
-
-- `loadbalancer_subnet_id` **String** See Argument Reference above.
-
-- `master_count` **Number** See Argument Reference above.
-
-- `master_flavor` **String** See Argument Reference above.
-
-- `pods_network_cidr` **String** See Argument Reference above.
-
-- `region` **String** See Argument Reference above.
-
-- `registry_auth_password` **String** See Argument Reference above.
-
-- `status` **String** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `api_address` **String** COE API address.
 
 - `created_at` **String** The time at which cluster was created.

@@ -40,36 +40,13 @@ resource "vkcs_lb_monitor" "monitor_1" {
 
 - `name` **String** (*Optional*) The Name of the Monitor.
 
-- `region` **String** (*Optional*) The region in which to obtain the Loadbalancer client. If omitted, the	`region` argument of the provider is used. Changing this creates a new monitor.
+- `region` **String** (*Optional*) The region in which to obtain the Loadbalancer client. If omitted, the `region` argument of the provider is used. Changing this creates a new monitor.
 
 - `url_path` **String** (*Optional*) Required for HTTP(S) types. URI path that will be accessed if monitor type is HTTP or HTTPS.
 
 
 ## Attributes Reference
-- `delay` **Number** See Argument Reference above.
-
-- `max_retries` **Number** See Argument Reference above.
-
-- `pool_id` **String** See Argument Reference above.
-
-- `timeout` **Number** See Argument Reference above.
-
-- `type` **String** See Argument Reference above.
-
-- `admin_state_up` **Boolean** See Argument Reference above.
-
-- `expected_codes` **String** See Argument Reference above.
-
-- `http_method` **String** See Argument Reference above.
-
-- `max_retries_down` **Number** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `region` **String** See Argument Reference above.
-
-- `url_path` **String** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `id` **String** ID of the resource.
 
 
