@@ -3,12 +3,13 @@ on:
   pull_request:
     paths:
       - 'vkcs/**'
+      - '!vkcs/**_test.go'
 jobs:
   error:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: tj-actions/changed-files@v23.1
+      - uses: tj-actions/changed-files@v35
         id: changelog
         with:
           files: |

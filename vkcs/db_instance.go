@@ -7,6 +7,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
 // Datastore names
@@ -39,8 +40,8 @@ func extractDatabaseRestorePoint(v []interface{}) (restorePoint, error) {
 	return R, nil
 }
 
-func extractDatabaseDatastore(v []interface{}) (dataStore, error) {
-	var D dataStore
+func extractDatabaseDatastore(v []interface{}) (dataStoreShort, error) {
+	var D dataStoreShort
 	in := v[0].(map[string]interface{})
 	err := mapStructureDecoder(&D, &in, decoderConfig)
 	if err != nil {
@@ -49,7 +50,7 @@ func extractDatabaseDatastore(v []interface{}) (dataStore, error) {
 	return D, nil
 }
 
-func flattenDatabaseInstanceDatastore(d dataStore) []map[string]interface{} {
+func flattenDatabaseInstanceDatastore(d dataStoreShort) []map[string]interface{} {
 	datastore := make([]map[string]interface{}, 1)
 	datastore[0] = make(map[string]interface{})
 	datastore[0]["type"] = d.Type
@@ -57,17 +58,23 @@ func flattenDatabaseInstanceDatastore(d dataStore) []map[string]interface{} {
 	return datastore
 }
 
-func extractDatabaseNetworks(v []interface{}) ([]networkOpts, error) {
+func extractDatabaseNetworks(v []interface{}) ([]networkOpts, []string, error) {
 	Networks := make([]networkOpts, len(v))
+	var SecurityGroups []string
 	for i, network := range v {
 		var N networkOpts
-		err := mapstructure.Decode(network.(map[string]interface{}), &N)
+		networkMap := network.(map[string]interface{})
+		sg, ok := networkMap["security_groups"]
+		if ok {
+			SecurityGroups = expandToStringSlice(sg.(*schema.Set).List())
+		}
+		err := mapstructure.Decode(networkMap, &N)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		Networks[i] = N
 	}
-	return Networks, nil
+	return Networks, SecurityGroups, nil
 }
 
 func extractDatabaseAutoExpand(v []interface{}) (instanceAutoExpandOpts, error) {

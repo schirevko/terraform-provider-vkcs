@@ -24,9 +24,9 @@ resource "vkcs_lb_loadbalancer" "lb_1" {
 
 - `name` **String** (*Optional*) Human-readable name for the Loadbalancer. Does not have to be unique.
 
-- `region` **String** (*Optional*) The region in which to obtain the Loadbalancer client. If omitted, the	`region` argument of the provider is used. Changing this creates a new LB loadbalancer.
+- `region` **String** (*Optional*) The region in which to obtain the Loadbalancer client. If omitted, the `region` argument of the provider is used. Changing this creates a new LB loadbalancer.
 
-- `security_group_ids` <strong>Set of </strong>**String** (*Optional*) A list of security group IDs to apply to the loadbalancer. The security groups must be specified by ID and not name (as opposed to how they are configured with the Compute Instance).
+- `security_group_ids` <strong>Set of </strong>**String** (*Optional* Deprecated) A list of security group IDs to apply to the loadbalancer. The security groups must be specified by ID and not name (as opposed to how they are configured with the Compute Instance). ***Deprecated*** This argument is deprecated, please do not use it.
 
 - `tags` <strong>Set of </strong>**String** (*Optional*) A list of simple strings assigned to the loadbalancer.
 
@@ -40,28 +40,7 @@ resource "vkcs_lb_loadbalancer" "lb_1" {
 
 
 ## Attributes Reference
-- `admin_state_up` **Boolean** See Argument Reference above.
-
-- `availability_zone` **String** See Argument Reference above.
-
-- `description` **String** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `region` **String** See Argument Reference above.
-
-- `security_group_ids` <strong>Set of </strong>**String** See Argument Reference above.
-
-- `tags` <strong>Set of </strong>**String** See Argument Reference above.
-
-- `vip_address` **String** See Argument Reference above.
-
-- `vip_network_id` **String** See Argument Reference above.
-
-- `vip_port_id` **String** See Argument Reference above.
-
-- `vip_subnet_id` **String** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `id` **String** ID of the resource.
 
 

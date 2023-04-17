@@ -2,6 +2,7 @@ package vkcs
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -29,6 +30,7 @@ type configer interface {
 	ComputeV2Client(region string) (*gophercloud.ServiceClient, error)
 	ImageV2Client(region string) (*gophercloud.ServiceClient, error)
 	NetworkingV2Client(region string, sdn string) (*gophercloud.ServiceClient, error)
+	PublicDNSV2Client(region string) (*gophercloud.ServiceClient, error)
 	BlockStorageV3Client(region string) (*gophercloud.ServiceClient, error)
 	KeyManagerV1Client(region string) (*gophercloud.ServiceClient, error)
 	ContainerInfraV1Client(region string) (ContainerClient, error)
@@ -40,6 +42,7 @@ type configer interface {
 // config uses openstackbase.Config as the base/foundation of this provider's
 type config struct {
 	auth.Config
+	ContainerInfraV1MicroVersion string
 }
 
 var _ configer = &config{}
@@ -62,10 +65,16 @@ func (c *config) NetworkingV2Client(region string, sdn string) (*gophercloud.Ser
 	if err != nil {
 		return client, err
 	}
-	client.MoreHeaders = map[string]string{
-		"X-SDN": sdn,
+	if sdn != searchInAllSDNs {
+		client.MoreHeaders = map[string]string{
+			"X-SDN": sdn,
+		}
 	}
 	return client, err
+}
+
+func (c *config) PublicDNSV2Client(region string) (*gophercloud.ServiceClient, error) {
+	return c.CommonServiceClientInit(newPublicDNSV2, region, "publicdns")
 }
 
 func (c *config) BlockStorageV3Client(region string) (*gophercloud.ServiceClient, error) {
@@ -102,7 +111,14 @@ func (c *config) DatabaseV1Client(region string) (*gophercloud.ServiceClient, er
 
 // ContainerInfraV1Client is implementation of ContainerInfraV1Client method
 func (c *config) ContainerInfraV1Client(region string) (ContainerClient, error) {
-	return c.Config.ContainerInfraV1Client(region)
+	client, err := c.Config.ContainerInfraV1Client(region)
+	if err != nil {
+		return client, err
+	}
+	client.MoreHeaders = map[string]string{
+		"MCS-API-Version": fmt.Sprintf("container-infra %s", c.ContainerInfraV1MicroVersion),
+	}
+	return client, err
 }
 
 // IdentityV3Client is implementation of ContainerInfraV1Client method
@@ -130,6 +146,7 @@ func newConfig(d *schema.ResourceData, terraformVersion string) (configer, diag.
 			SDKVersion:       meta.SDKVersionString(),
 			MutexKV:          mutexkv.NewMutexKV(),
 		},
+		d.Get("cloud_containers_api_version").(string),
 	}
 
 	if config.UserDomainID != "" {
@@ -189,6 +206,13 @@ func Provider() *schema.Provider {
 				DefaultFunc: schema.EnvDefaultFunc("OS_REGION_NAME", defaultRegionName),
 				Description: "A region to use.",
 			},
+			"cloud_containers_api_version": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  cloudContainersAPIVersion,
+				Description: "Cloud Containers API version to use.\n" +
+					"_NOTE_ Only for custom VKCS deployments.",
+			},
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
@@ -208,9 +232,14 @@ func Provider() *schema.Provider {
 			"vkcs_keymanager_container":          dataSourceKeyManagerContainer(),
 			"vkcs_blockstorage_volume":           dataSourceBlockStorageVolume(),
 			"vkcs_blockstorage_snapshot":         dataSourceBlockStorageSnapshot(),
+			"vkcs_lb_loadbalancer":               dataSourceLoadBalancer(),
 			"vkcs_sharedfilesystem_sharenetwork": dataSourceSharedFilesystemShareNetwork(),
 			"vkcs_sharedfilesystem_share":        dataSourceSharedFilesystemShare(),
 			"vkcs_db_database":                   dataSourceDatabaseDatabase(),
+			"vkcs_db_datastore":                  dataSourceDatabaseDatastore(),
+			"vkcs_db_datastore_capabilities":     dataSourceDatabaseDatastoreCapabilities(),
+			"vkcs_db_datastore_parameters":       dataSourceDatabaseDatastoreParameters(),
+			"vkcs_db_datastores":                 dataSourceDatabaseDatastores(),
 			"vkcs_db_instance":                   dataSourceDatabaseInstance(),
 			"vkcs_db_user":                       dataSourceDatabaseUser(),
 			"vkcs_db_backup":                     dataSourceDatabaseBackup(),
@@ -221,6 +250,7 @@ func Provider() *schema.Provider {
 			"vkcs_kubernetes_node_group":         dataSourceKubernetesNodeGroup(),
 			"vkcs_region":                        dataSourceVkcsRegion(),
 			"vkcs_regions":                       dataSourceVkcsRegions(),
+			"vkcs_publicdns_zone":                dataSourcePublicDNSZone(),
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
@@ -273,6 +303,8 @@ func Provider() *schema.Provider {
 			"vkcs_db_config_group":                    resourceDatabaseConfigGroup(),
 			"vkcs_kubernetes_cluster":                 resourceKubernetesCluster(),
 			"vkcs_kubernetes_node_group":              resourceKubernetesNodeGroup(),
+			"vkcs_publicdns_zone":                     resourcePublicDNSZone(),
+			"vkcs_publicdns_record":                   resourcePublicDNSRecord(),
 		},
 	}
 

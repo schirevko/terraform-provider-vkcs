@@ -9,7 +9,8 @@ resource "vkcs_db_instance" "db-instance" {
   }
 
   flavor_id   = data.vkcs_compute_flavor.db.id
-  
+  cloud_monitoring_enabled = true
+
   size        = 8
   volume_type = "ceph-ssd"
   disk_autoexpand {
@@ -19,6 +20,7 @@ resource "vkcs_db_instance" "db-instance" {
 
   network {
     uuid = vkcs_networking_network.db.id
+    security_groups = [vkcs_networking_secgroup.secgroup.id]
   }
 
   capabilities {
@@ -29,7 +31,7 @@ resource "vkcs_db_instance" "db-instance" {
   }
 
   depends_on = [
-    vkcs_networking_network.db,
-    vkcs_networking_subnet.db
+    vkcs_networking_router_interface.db,
+    vkcs_networking_secgroup.secgroup
   ]
 }

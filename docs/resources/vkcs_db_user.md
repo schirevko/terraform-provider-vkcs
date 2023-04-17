@@ -32,8 +32,7 @@ resource "vkcs_db_instance" "db-instance" {
   }
 
   depends_on = [
-    vkcs_networking_network.db,
-    vkcs_networking_subnet.db
+    vkcs_networking_router_interface.db
   ]
 }
 
@@ -66,16 +65,7 @@ resource "vkcs_db_user" "db-user" {
 
 
 ## Attributes Reference
-- `dbms_id` **String** See Argument Reference above.
-
-- `name` **String** See Argument Reference above.
-
-- `password` **String** See Argument Reference above.
-
-- `databases` **String** See Argument Reference above.
-
-- `host` **String** See Argument Reference above.
-
+In addition to all arguments above, the following attributes are exported:
 - `dbms_type` **String** Type of dbms for the user, can be "instance" or "cluster".
 
 - `id` **String** ID of the resource.

@@ -28,7 +28,7 @@ type instanceResp struct {
 	ID                string                  `json:"id"`
 	Created           dateTimeWithoutTZFormat `json:"created"`
 	Updated           dateTimeWithoutTZFormat `json:"updated"`
-	DataStore         *dataStore              `json:"datastore"`
+	DataStore         *dataStoreShort         `json:"datastore"`
 	Flavor            *links                  `json:"flavor"`
 	GaVersion         string                  `json:"ga_version"`
 	HealthStatus      string                  `json:"health_status"`
@@ -79,8 +79,8 @@ type links struct {
 	Links *[]link `json:"links"`
 }
 
-// dataStore represents dbaas datastore
-type dataStore struct {
+// dataStoreShort represents dbaas datastore short response
+type dataStoreShort struct {
 	Type    string `json:"type" required:"true"`
 	Version string `json:"version" required:"true"`
 }
@@ -99,7 +99,7 @@ type configuration struct {
 }
 
 type restorePoint struct {
-	BackupRef string `json:"backup_ref" required:"true" mapstructure:"backup_id"`
+	BackupRef string `json:"backupRef" required:"true" mapstructure:"backup_id"`
 	Target    string `json:"target,omitempty"`
 }
 
@@ -187,6 +187,13 @@ type instanceResizeOpts struct {
 // instanceRootUserEnableOpts represents parameters of request to enable root user for database instance
 type instanceRootUserEnableOpts struct {
 	Password string `json:"password,omitempty"`
+}
+
+// iinstanceUpdateCloudMonitoringOpts represents parameters of request to update cloud monitoring options
+type updateCloudMonitoringOpts struct {
+	CloudMonitoring struct {
+		Enable bool `json:"enable"`
+	} `json:"cloud_monitoring"`
 }
 
 // instanceRespOpts is used to get instance response
@@ -314,6 +321,12 @@ func (opts *instanceRootUserEnableOpts) Map() (map[string]interface{}, error) {
 }
 
 // Map converts opts to a map (for a request body)
+func (opts *updateCloudMonitoringOpts) Map() (map[string]interface{}, error) {
+	body, err := gophercloud.BuildRequestBody(*opts, "")
+	return body, err
+}
+
+// Map converts opts to a map (for a request body)
 func (opts *instanceUpdateAutoExpandOpts) Map() (map[string]interface{}, error) {
 	body, err := gophercloud.BuildRequestBody(*opts, "")
 	return body, err
@@ -367,21 +380,23 @@ type dbInstance struct {
 
 // dbInstanceCreateOpts represents parameters of creation of database instance
 type dbInstanceCreateOpts struct {
-	FlavorRef         string                   `json:"flavorRef,omitempty"`
-	Volume            *volume                  `json:"volume" required:"true"`
-	Name              string                   `json:"name" required:"true"`
-	Datastore         *dataStore               `json:"datastore" required:"true"`
-	Nics              []networkOpts            `json:"nics" required:"true"`
-	ReplicaOf         string                   `json:"replica_of,omitempty"`
-	AvailabilityZone  string                   `json:"availability_zone,omitempty"`
-	FloatingIPEnabled bool                     `json:"allow_remote_access,omitempty"`
-	Keypair           string                   `json:"key_name,omitempty"`
-	AutoExpand        *int                     `json:"volume_autoresize_enabled,omitempty"`
-	MaxDiskSize       int                      `json:"volume_autoresize_max_size,omitempty"`
-	Walvolume         *walVolume               `json:"wal_volume,omitempty"`
-	Capabilities      []instanceCapabilityOpts `json:"capabilities,omitempty"`
-	RestorePoint      *restorePoint            `json:"restore_point,omitempty"`
-	BackupSchedule    *backupSchedule          `json:"backup_schedule,omitempty"`
+	FlavorRef              string                   `json:"flavorRef,omitempty"`
+	Volume                 *volume                  `json:"volume" required:"true"`
+	Name                   string                   `json:"name" required:"true"`
+	Datastore              *dataStoreShort          `json:"datastore" required:"true"`
+	Nics                   []networkOpts            `json:"nics" required:"true"`
+	ReplicaOf              string                   `json:"replica_of,omitempty"`
+	AvailabilityZone       string                   `json:"availability_zone,omitempty"`
+	FloatingIPEnabled      bool                     `json:"allow_remote_access,omitempty"`
+	Keypair                string                   `json:"key_name,omitempty"`
+	AutoExpand             *int                     `json:"volume_autoresize_enabled,omitempty"`
+	MaxDiskSize            int                      `json:"volume_autoresize_max_size,omitempty"`
+	Walvolume              *walVolume               `json:"wal_volume,omitempty"`
+	Capabilities           []instanceCapabilityOpts `json:"capabilities,omitempty"`
+	RestorePoint           *restorePoint            `json:"restorePoint,omitempty"`
+	BackupSchedule         *backupSchedule          `json:"backup_schedule,omitempty"`
+	CloudMonitoringEnabled bool                     `json:"cloud_monitoring_enabled,omitempty"`
+	SecurityGroups         []string                 `json:"security_groups,omitempty"`
 }
 
 // networkOpts represents network parameters of database instance
@@ -389,6 +404,7 @@ type networkOpts struct {
 	UUID      string `json:"net-id,omitempty"`
 	Port      string `json:"port-id,omitempty"`
 	V4FixedIP string `json:"v4-fixed-ip,omitempty" mapstructure:"fixed_ip_v4"`
+	SubnetID  string `json:"subnet-id,omitempty" mapstructure:"subnet_id"`
 }
 
 type commonInstanceResult struct {
@@ -584,7 +600,7 @@ func instanceCreate(client databaseClient, opts optsBuilder) (r getInstanceShort
 		return
 	}
 	var result *http.Response
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	result, r.Err = client.Post(baseURL(client, instancesAPIPath), b, &r.Body, reqOpts)
 	if r.Err == nil {
 		r.Header = result.Header
@@ -594,7 +610,7 @@ func instanceCreate(client databaseClient, opts optsBuilder) (r getInstanceShort
 
 // instanceGet performs request to get database instance
 func instanceGet(client databaseClient, id string) (r getInstanceResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(getURL(client, instancesAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {
@@ -604,7 +620,7 @@ func instanceGet(client databaseClient, id string) (r getInstanceResult) {
 }
 
 func instanceGetCapabilities(client databaseClient, id string) (r getInstanceCapabilitiesResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(instanceCapabilitiesURL(client, instancesAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {
@@ -614,7 +630,7 @@ func instanceGetCapabilities(client databaseClient, id string) (r getInstanceCap
 }
 
 func clusterGetCapabilities(client databaseClient, id string) (r getInstanceCapabilitiesResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(instanceCapabilitiesURL(client, dbClustersAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {
@@ -624,7 +640,7 @@ func clusterGetCapabilities(client databaseClient, id string) (r getInstanceCapa
 }
 
 func instanceGetBackupSchedule(client databaseClient, id string) (r getInstanceBackupScheduleResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Get(backupScheduleURL(client, instancesAPIPath, id), &r.Body, reqOpts)
 	if r.Err == nil {
@@ -640,7 +656,7 @@ func instanceDetachReplica(client databaseClient, id string, opts optsBuilder) (
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Patch(getURL(client, instancesAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -656,7 +672,7 @@ func instanceUpdateAutoExpand(client databaseClient, id string, opts optsBuilder
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Patch(getURL(client, instancesAPIPath, id), &b, nil, reqOpts)
 	if r.Err == nil {
@@ -675,7 +691,7 @@ func instanceDetachConfigurationGroup(client databaseClient, id string) (r confi
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Put(getURL(client, instancesAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -691,7 +707,7 @@ func instanceAttachConfigurationGroup(client databaseClient, id string, opts opt
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Put(getURL(client, instancesAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -707,7 +723,7 @@ func instanceAction(client databaseClient, id string, opts optsBuilder) (r actio
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	result, r.Err = client.Post(instanceActionURL(client, instancesAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -723,7 +739,7 @@ func instanceRootUserEnable(client databaseClient, id string, opts optsBuilder) 
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Post(rootUserURL(client, instancesAPIPath, id), b, &r.Body, reqOpts)
 	if r.Err == nil {
@@ -735,7 +751,7 @@ func instanceRootUserEnable(client databaseClient, id string, opts optsBuilder) 
 // instanceRootUserGet performs request to get root user of database instance
 func instanceRootUserGet(client databaseClient, id string) (r isRootUserEnabledResult) {
 	var result *http.Response
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	result, err := client.Get(rootUserURL(client, instancesAPIPath, id), &r.Body, reqOpts)
 	if err == nil {
 		r.Header = result.Header
@@ -745,7 +761,7 @@ func instanceRootUserGet(client databaseClient, id string) (r isRootUserEnabledR
 
 // instanceRootUserDisable performs request to disable root user on database instance
 func instanceRootUserDisable(client databaseClient, id string) (r deleteRootUserResult) {
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Delete(rootUserURL(client, instancesAPIPath, id), reqOpts)
 	if r.Err == nil {
@@ -760,7 +776,7 @@ func instanceUpdateBackupSchedule(client databaseClient, id string, opts optsBui
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(200)
+	reqOpts := getRequestOpts(200)
 	var result *http.Response
 	result, r.Err = client.Put(backupScheduleURL(client, instancesAPIPath, id), b, nil, reqOpts)
 	if r.Err == nil {
@@ -771,7 +787,7 @@ func instanceUpdateBackupSchedule(client databaseClient, id string, opts optsBui
 
 // instanceDelete performs request to delete database instance
 func instanceDelete(client databaseClient, id string) (r deleteResult) {
-	reqOpts := getDBRequestOpts()
+	reqOpts := getRequestOpts()
 	var result *http.Response
 	result, r.Err = client.Delete(getURL(client, instancesAPIPath, id), reqOpts)
 	if r.Err == nil {
@@ -787,7 +803,7 @@ func userCreate(client databaseClient, id string, opts createOptsBuilder, dbmsTy
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	if dbmsType == dbmsTypeInstance {
 		result, r.Err = client.Post(instanceUsersURL(client, instancesAPIPath, id), b, nil, reqOpts)
@@ -815,7 +831,7 @@ func userList(client databaseClient, id string, dbmsType string) pagination.Page
 
 // userDelete performs request to delete database user
 func userDelete(client databaseClient, id string, userName string, dbmsType string) (r userDeleteResult) {
-	reqOpts := getDBRequestOpts()
+	reqOpts := getRequestOpts()
 	var result *http.Response
 	var APIPath string
 	if dbmsType == dbmsTypeInstance {
@@ -837,7 +853,7 @@ func userUpdate(client databaseClient, id string, name string, opts optsBuilder,
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var APIPath string
 	if dbmsType == dbmsTypeInstance {
 		APIPath = instancesAPIPath
@@ -859,7 +875,7 @@ func userUpdateDatabases(client databaseClient, id string, name string, opts opt
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	var APIPath string
 	if dbmsType == dbmsTypeInstance {
@@ -876,7 +892,7 @@ func userUpdateDatabases(client databaseClient, id string, name string, opts opt
 
 // userDeleteDatabase performs request to delete database user
 func userDeleteDatabase(client databaseClient, id string, userName string, dbName string, dbmsType string) (r deleteUserDatabaseResult) {
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	var APIPath string
 	if dbmsType == dbmsTypeInstance {
@@ -898,7 +914,7 @@ func databaseCreate(client databaseClient, id string, opts createOptsBuilder, db
 		r.Err = err
 		return
 	}
-	reqOpts := getDBRequestOpts(202)
+	reqOpts := getRequestOpts(202)
 	var result *http.Response
 	var APIPath string
 	if dbmsType == dbmsTypeInstance {
@@ -929,7 +945,7 @@ func databaseList(client databaseClient, id string, dbmsType string) pagination.
 
 // databaseDelete performs request to delete database
 func databaseDelete(client databaseClient, id string, dbName string, dbmsType string) (r databaseDeleteResult) {
-	reqOpts := getDBRequestOpts()
+	reqOpts := getRequestOpts()
 	var result *http.Response
 	var APIPath string
 	if dbmsType == dbmsTypeInstance {

@@ -17,6 +17,10 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 )
 
+const (
+	storeS3 = "s3"
+)
+
 func resourceImagesImage() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceImagesImageCreate,
@@ -215,7 +219,8 @@ func resourceImagesImage() *schema.Resource {
 				Description: "The date the image was last updated.",
 			},
 		},
-		Description: "Manages an Image resource within VKCS.\n\n~> **Note:** All arguments including the source image URL password will be stored in the raw state as plain-text. [Read more about sensitive data in state](https://www.terraform.io/docs/language/state/sensitive-data.html).",
+		Description: "Manages an Image resource within VKCS.\n\n" +
+			"~> **Note:** All arguments including the source image URL password will be stored in the raw state as plain-text. [Read more about sensitive data in state](https://www.terraform.io/docs/language/state/sensitive-data.html).",
 	}
 }
 
@@ -231,6 +236,9 @@ func resourceImagesImageCreate(ctx context.Context, d *schema.ResourceData, meta
 
 	properties := d.Get("properties").(map[string]interface{})
 	imageProperties := resourceImagesImageExpandProperties(properties)
+	if !resourceImagesImageNeedsDefaultStore(imageClient.Endpoint) {
+		imageProperties["store"] = storeS3
+	}
 
 	createOpts := &images.CreateOpts{
 		Name:            d.Get("name").(string),

@@ -2,9 +2,12 @@ package vkcs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 
+	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -26,12 +29,17 @@ var (
 	dbClusterStatusBackup             dbClusterStatus = "BACKUP"
 )
 
+const (
+	dbClusterInstanceRoleLeader string = "leader"
+)
+
 func resourceDatabaseCluster() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceDatabaseClusterCreate,
 		ReadContext:   resourceDatabaseClusterRead,
 		DeleteContext: resourceDatabaseClusterDelete,
 		UpdateContext: resourceDatabaseClusterUpdate,
+		CustomizeDiff: resourceDatabaseCustomizeDiff,
 		Importer: &schema.ResourceImporter{
 			StateContext: func(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 				config := meta.(configer)
@@ -159,6 +167,12 @@ func resourceDatabaseCluster() *schema.Resource {
 				Description: "Object that represents datastore of the cluster. Changing this creates a new cluster.",
 			},
 
+			"loadbalancer_id": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "The id of the loadbalancer attached to the cluster. **New since v.0.1.15**.",
+			},
+
 			"network": {
 				Type:     schema.TypeList,
 				Optional: true,
@@ -166,16 +180,32 @@ func resourceDatabaseCluster() *schema.Resource {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"uuid": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							ForceNew:    true,
-							Description: "The id of the network. Changing this creates a new cluster.",
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+							Description: "The id of the network. Changing this creates a new cluster." +
+								"**Note** Although this argument is marked as optional, it is actually required at the moment. Not setting a value for it may cause an error.",
 						},
 						"port": {
 							Type:        schema.TypeString,
 							Optional:    true,
 							ForceNew:    true,
-							Description: "The port id of the network. Changing this creates a new cluster.",
+							Description: "The port id of the network. Changing this creates a new cluster. ***Deprecated*** This argument is deprecated, please do not use it.",
+							Deprecated:  "This argument is deprecated, please do not use it.",
+						},
+						"subnet_id": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							ForceNew:    true,
+							Description: "The id of the subnet. Changing this creates a new cluster. **New since v.0.1.15**.",
+						},
+						"security_groups": {
+							Type:        schema.TypeSet,
+							Optional:    true,
+							ForceNew:    true,
+							Elem:        &schema.Schema{Type: schema.TypeString},
+							Set:         schema.HashString,
+							Description: "An array of one or more security group IDs to associate with the cluster instances. Changing this creates a new cluster. **New since v.0.2.0**.",
 						},
 					},
 				},
@@ -359,6 +389,52 @@ func resourceDatabaseCluster() *schema.Resource {
 				},
 				Description: "Object that represents configuration of PITR backup. This functionality is available only for postgres datastore. **New since v.0.1.4**",
 			},
+
+			"shrink_options": {
+				Type:        schema.TypeList,
+				Optional:    true,
+				Elem:        &schema.Schema{Type: schema.TypeString},
+				Description: "Used only for shrinking cluster. List of IDs of instances that should remain after shrink. If no options are supplied, shrink operation will choose first non-leader instance to delete.",
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return true
+				},
+			},
+
+			"cloud_monitoring_enabled": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				ForceNew:    false,
+				Description: "Enable cloud monitoring for the cluster. Changing this for Redis or MongoDB creates a new instance. **New since v.0.2.0**",
+			},
+
+			// Computed values
+			"instances": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"instance_id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The id of the instance.",
+						},
+						"ip": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Schema{
+								Type: schema.TypeString,
+							},
+							Description: "IP address of the instance.",
+						},
+						"role": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "The role of the instance in cluster.",
+						},
+					},
+				},
+				Description: "Cluster instances info.",
+			},
 		},
 		Description: "Provides a db cluster resource. This can be used to create, modify and delete db cluster for galera_mysql, postgresql, tarantool datastores.",
 	}
@@ -372,8 +448,9 @@ func resourceDatabaseClusterCreate(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	createOpts := &dbClusterCreateOpts{
-		Name:              d.Get("name").(string),
-		FloatingIPEnabled: d.Get("floating_ip_enabled").(bool),
+		Name:                   d.Get("name").(string),
+		FloatingIPEnabled:      d.Get("floating_ip_enabled").(bool),
+		CloudMonitoringEnabled: d.Get("cloud_monitoring_enabled").(bool),
 	}
 
 	message := "unable to determine vkcs_db_cluster"
@@ -431,7 +508,7 @@ func resourceDatabaseClusterCreate(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	if v, ok := d.GetOk("network"); ok {
-		createDBInstanceOpts.Nics, err = extractDatabaseNetworks(v.([]interface{}))
+		createDBInstanceOpts.Nics, createDBInstanceOpts.SecurityGroups, err = extractDatabaseNetworks(v.([]interface{}))
 		if err != nil {
 			return diag.Errorf("%s network", message)
 		}
@@ -535,6 +612,7 @@ func resourceDatabaseClusterRead(ctx context.Context, d *schema.ResourceData, me
 	d.Set("flavor_id", cluster.Instances[0].Flavor.ID)
 	d.Set("cluster_size", len(cluster.Instances))
 	d.Set("volume_size", cluster.Instances[0].Volume.Size)
+	d.Set("loadbalancer_id", cluster.LoadbalancerID)
 
 	d.Set("configuration_id", cluster.ConfigurationID)
 	if _, ok := d.GetOk("disk_autoexpand"); ok {
@@ -554,6 +632,8 @@ func resourceDatabaseClusterRead(ctx context.Context, d *schema.ResourceData, me
 		}
 	}
 
+	d.Set("instances", flattenDatabaseClusterInstances(cluster.Instances))
+
 	backupSchedule, err := dbClusterGetBackupSchedule(DatabaseV1Client, d.Id()).extract()
 	if err != nil {
 		return diag.Errorf("error getting backup schedule for cluster: %s: %s", d.Id(), err)
@@ -565,275 +645,98 @@ func resourceDatabaseClusterRead(ctx context.Context, d *schema.ResourceData, me
 		d.Set("backup_schedule", nil)
 	}
 
-	return nil
+	if !d.HasChangesExcept() {
+		return nil
+	}
+
+	var diags diag.Diagnostics
+
+	rawNetworks := d.Get("network").([]interface{})
+	diags = checkDBNetworks(rawNetworks, cty.Path{}, diags)
+	return diags
 }
 
 func resourceDatabaseClusterUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	config := meta.(configer)
-	DatabaseV1Client, err := config.DatabaseV1Client(getRegion(d, config))
+	dbClient, err := config.DatabaseV1Client(getRegion(d, config))
 	if err != nil {
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
+	clusterID := d.Id()
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{string(dbClusterStatusBuild)},
 		Target:     []string{string(dbClusterStatusActive)},
-		Refresh:    databaseClusterStateRefreshFunc(DatabaseV1Client, d.Id(), nil),
+		Refresh:    databaseClusterStateRefreshFunc(dbClient, d.Id(), nil),
 		Timeout:    d.Timeout(schema.TimeoutCreate),
 		Delay:      dbInstanceDelay,
 		MinTimeout: dbInstanceMinTimeout,
 	}
+	updateCtx := &dbResourceUpdateContext{
+		Ctx:       ctx,
+		Client:    dbClient,
+		D:         d,
+		StateConf: stateConf,
+	}
 
 	if d.HasChange("configuration_id") {
-		old, new := d.GetChange("configuration_id")
-
-		var detachConfigurationOpts dbClusterDetachConfigurationGroupOpts
-		detachConfigurationOpts.ConfigurationDetach.ConfigurationID = old.(string)
-		err := dbClusterAction(DatabaseV1Client, d.Id(), &detachConfigurationOpts).ExtractErr()
+		err = databaseClusterActionUpdateConfiguration(updateCtx)
 		if err != nil {
-			return diag.FromErr(err)
-		}
-		log.Printf("Detaching configuration %s from vkcs_db_cluster %s", old, d.Id())
-
-		_, err = stateConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
-		}
-
-		if new != "" {
-			var attachConfigurationOpts dbClusterAttachConfigurationGroupOpts
-			attachConfigurationOpts.ConfigurationAttach.ConfigurationID = new.(string)
-			err := dbClusterAction(DatabaseV1Client, d.Id(), &attachConfigurationOpts).ExtractErr()
-			if err != nil {
-				return diag.FromErr(err)
-			}
-			log.Printf("Attaching configuration %s to vkcs_db_cluster %s", new, d.Id())
-
-			_, err = stateConf.WaitForStateContext(ctx)
-			if err != nil {
-				return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
-			}
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
 	if d.HasChange("volume_size") {
-		_, new := d.GetChange("volume_size")
-		var resizeVolumeOpts dbClusterResizeVolumeOpts
-		resizeVolumeOpts.Resize.Volume.Size = new.(int)
-		err := dbClusterAction(DatabaseV1Client, d.Id(), &resizeVolumeOpts).ExtractErr()
+		err = databaseClusterActionResizeVolume(updateCtx, "")
 		if err != nil {
-			return diag.FromErr(err)
-		}
-		log.Printf("Resizing volume from vkcs_db_cluster %s", d.Id())
-
-		stateConf.Pending = []string{string(dbClusterStatusResize)}
-		stateConf.Target = []string{string(dbClusterStatusActive)}
-
-		_, err = stateConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
 	if d.HasChange("flavor_id") {
-		var resizeOpts dbClusterResizeOpts
-		resizeOpts.Resize.FlavorRef = d.Get("flavor_id").(string)
-		err := dbClusterAction(DatabaseV1Client, d.Id(), &resizeOpts).ExtractErr()
+		err = databaseClusterActionResizeFlavor(updateCtx, "")
 		if err != nil {
-			return diag.FromErr(err)
-		}
-		log.Printf("Resizing flavor from vkcs_db_cluster %s", d.Id())
-
-		stateConf.Pending = []string{string(dbClusterStatusResize)}
-		stateConf.Target = []string{string(dbClusterStatusActive)}
-
-		_, err = stateConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
 	if d.HasChange("disk_autoexpand") {
-		_, new := d.GetChange("disk_autoexpand")
-		autoExpandProperties, err := extractDatabaseAutoExpand(new.([]interface{}))
+		err = databaseClusterUpdateDiskAutoexpand(updateCtx)
 		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster disk_autoexpand")
-		}
-		var autoExpandOpts dbClusterUpdateAutoExpandOpts
-		if autoExpandProperties.AutoExpand {
-			autoExpandOpts.Cluster.VolumeAutoresizeEnabled = 1
-		} else {
-			autoExpandOpts.Cluster.VolumeAutoresizeEnabled = 0
-		}
-		autoExpandOpts.Cluster.VolumeAutoresizeMaxSize = autoExpandProperties.MaxDiskSize
-		err = dbClusterUpdateAutoExpand(DatabaseV1Client, d.Id(), &autoExpandOpts).ExtractErr()
-		if err != nil {
-			return diag.FromErr(err)
-		}
-
-		stateConf.Pending = []string{string(dbClusterStatusUpdating)}
-		stateConf.Target = []string{string(dbClusterStatusActive)}
-
-		_, err = stateConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
 	if d.HasChange("wal_volume") {
-		old, new := d.GetChange("wal_volume")
-		walVolumeOptsNew, err := extractDatabaseWalVolume(new.([]interface{}))
+		err = databaseClusterActionResizeWalVolume(updateCtx, "")
 		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster wal_volume")
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
-
-		walVolumeOptsOld, err := extractDatabaseWalVolume(old.([]interface{}))
-		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster wal_volume")
-		}
-
-		if walVolumeOptsNew.Size != walVolumeOptsOld.Size {
-			var resizeWalVolumeOpts dbClusterResizeWalVolumeOpts
-			resizeWalVolumeOpts.Resize.Volume.Size = walVolumeOptsNew.Size
-			resizeWalVolumeOpts.Resize.Volume.Kind = "wal"
-			err = dbClusterAction(DatabaseV1Client, d.Id(), &resizeWalVolumeOpts).ExtractErr()
-			if err != nil {
-				return diag.FromErr(err)
-			}
-
-			stateConf.Pending = []string{string(dbClusterStatusResize)}
-			stateConf.Target = []string{string(dbClusterStatusActive)}
-
-			_, err = stateConf.WaitForStateContext(ctx)
-			if err != nil {
-				return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
-			}
-		}
-
 	}
+
 	if d.HasChange("wal_disk_autoexpand") {
-		_, new := d.GetChange("wal_disk_autoexpand")
-		walAutoExpandProperties, err := extractDatabaseAutoExpand(new.([]interface{}))
+		err = databaseClusterUpdateWalDiskAutoexpand(updateCtx)
 		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster wal_disk_autoexpand")
-		}
-		var walAutoExpandOpts dbClusterUpdateAutoExpandWalOpts
-		if walAutoExpandProperties.AutoExpand {
-			walAutoExpandOpts.Cluster.WalVolume.VolumeAutoresizeEnabled = 1
-		} else {
-			walAutoExpandOpts.Cluster.WalVolume.VolumeAutoresizeEnabled = 0
-		}
-		walAutoExpandOpts.Cluster.WalVolume.VolumeAutoresizeMaxSize = walAutoExpandProperties.MaxDiskSize
-		err = dbClusterUpdateAutoExpand(DatabaseV1Client, d.Id(), &walAutoExpandOpts).ExtractErr()
-		if err != nil {
-			return diag.FromErr(err)
-		}
-
-		stateConf.Pending = []string{string(dbClusterStatusUpdating)}
-		stateConf.Target = []string{string(dbClusterStatusActive)}
-
-		_, err = stateConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
 	if d.HasChange("capabilities") {
-		_, newCapabilities := d.GetChange("capabilities")
-		newCapabilitiesOpts, err := extractDatabaseCapabilities(newCapabilities.([]interface{}))
+		err = databaseClusterActionApplyCapabilities(updateCtx)
 		if err != nil {
-			return diag.Errorf("unable to determine vkcs_db_cluster capability")
-		}
-		var applyCapabilityOpts dbClusterApplyCapabilityOpts
-		applyCapabilityOpts.ApplyCapability.Capabilities = newCapabilitiesOpts
-
-		err = dbClusterAction(DatabaseV1Client, d.Id(), &applyCapabilityOpts).ExtractErr()
-
-		if err != nil {
-			return diag.Errorf("error applying capability to vkcs_db_cluster %s: %s", d.Id(), err)
-		}
-
-		applyCapabilityClusterConf := &resource.StateChangeConf{
-			Pending:    []string{string(dbClusterStatusCapabilityApplying), string(dbClusterStatusBuild)},
-			Target:     []string{string(dbClusterStatusActive)},
-			Refresh:    databaseClusterStateRefreshFunc(DatabaseV1Client, d.Id(), &newCapabilitiesOpts),
-			Timeout:    d.Timeout(schema.TimeoutCreate),
-			Delay:      dbInstanceDelay,
-			MinTimeout: dbInstanceMinTimeout,
-		}
-		log.Printf("[DEBUG] Waiting for cluster to become ready after applying capability")
-		_, err = applyCapabilityClusterConf.WaitForStateContext(ctx)
-		if err != nil {
-			return diag.Errorf("error applying capability to vkcs_db_cluster %s: %s", d.Id(), err)
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
 	if d.HasChange("cluster_size") {
 		old, new := d.GetChange("cluster_size")
-		if new.(int) > old.(int) {
-			opts := make([]dbClusterGrowOpts, new.(int)-old.(int))
-
-			volumeSize := d.Get("volume_size").(int)
-			growOpts := dbClusterGrowOpts{
-				Keypair:          d.Get("keypair").(string),
-				AvailabilityZone: d.Get("availability_zone").(string),
-				FlavorRef:        d.Get("flavor_id").(string),
-				Volume:           &volume{Size: &volumeSize, VolumeType: d.Get("volume_type").(string)},
-			}
-			if v, ok := d.GetOk("wal_volume"); ok {
-				walVolumeOpts, err := extractDatabaseWalVolume(v.([]interface{}))
-				if err != nil {
-					return diag.Errorf("unable to determine vkcs_db_cluster wal_volume")
-				}
-				growOpts.Walvolume = &walVolume{
-					Size:       &walVolumeOpts.Size,
-					VolumeType: walVolumeOpts.VolumeType,
-				}
-			}
-			for i := 0; i < len(opts); i++ {
-				opts[i] = growOpts
-			}
-			growClusterOpts := dbClusterGrowClusterOpts{
-				Grow: opts,
-			}
-			err = dbClusterAction(DatabaseV1Client, d.Id(), &growClusterOpts).ExtractErr()
-
-			if err != nil {
-				return diag.Errorf("error growing vkcs_db_cluster %s: %s", d.Id(), err)
-			}
-			stateConf.Pending = []string{string(dbClusterStatusGrow)}
-			stateConf.Target = []string{string(dbClusterStatusActive)}
-
-			_, err = stateConf.WaitForStateContext(ctx)
-			if err != nil {
-				return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
-			}
-		} else {
-			cluster, err := dbClusterGet(DatabaseV1Client, d.Id()).extract()
-			if err != nil {
-				return diag.FromErr(checkDeleted(d, err, "Error retrieving vkcs_db_cluster"))
-			}
-			ids := make([]dbClusterShrinkOpts, old.(int)-new.(int))
-			for i := 0; i < len(ids); i++ {
-				ids[i].ID = cluster.Instances[i].ID
-			}
-
-			shrinkClusterOpts := dbClusterShrinkClusterOpts{
-				Shrink: ids,
-			}
-
-			err = dbClusterAction(DatabaseV1Client, d.Id(), &shrinkClusterOpts).ExtractErr()
-
-			if err != nil {
-				return diag.Errorf("error growing vkcs_db_cluster %s: %s", d.Id(), err)
-			}
-			stateConf.Pending = []string{string(dbClusterStatusShrink)}
-			stateConf.Target = []string{string(dbClusterStatusActive)}
-
-			_, err = stateConf.WaitForStateContext(ctx)
-			if err != nil {
-				return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
-			}
+		if sizeChange := new.(int) - old.(int); sizeChange > 0 {
+			err = databaseClusterActionGrow(updateCtx, "")
+		} else if sizeChange < 0 {
+			err = databaseClusterActionShrink(updateCtx, "")
+		}
+		if err != nil {
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
@@ -844,7 +747,7 @@ func resourceDatabaseClusterUpdate(ctx context.Context, d *schema.ResourceData, 
 			return diag.Errorf("unable to determine vkcs_db_cluster backup_schedule")
 		}
 
-		err = dbClusterUpdateBackupSchedule(DatabaseV1Client, d.Id(), &backupScheduleUpdateOpts).ExtractErr()
+		err = dbClusterUpdateBackupSchedule(dbClient, clusterID, &backupScheduleUpdateOpts).ExtractErr()
 
 		if err != nil {
 			return diag.Errorf("error updating backup schedule for vkcs_db_cluster %s: %s", d.Id(), err)
@@ -856,6 +759,13 @@ func resourceDatabaseClusterUpdate(ctx context.Context, d *schema.ResourceData, 
 		_, err = stateConf.WaitForStateContext(ctx)
 		if err != nil {
 			return diag.Errorf("error waiting for vkcs_db_cluster %s to become ready: %s", d.Id(), err)
+		}
+	}
+
+	if d.HasChange("cloud_monitoring_enabled") {
+		err = databaseClusterUpdateCloudMonitoring(updateCtx)
+		if err != nil {
+			return databaseClusterUpdateProcessError(err, clusterID)
 		}
 	}
 
@@ -889,4 +799,56 @@ func resourceDatabaseClusterDelete(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	return nil
+}
+
+func databaseClusterUpdateProcessError(err error, clusterID string) diag.Diagnostics {
+	baseErr := err
+	if unwrappedErr := errors.Unwrap(err); unwrappedErr != nil {
+		baseErr = unwrappedErr
+	}
+
+	newErrMsg := baseErr.Error()
+	switch baseErr {
+	case errDBClusterNotFound:
+		newErrMsg = fmt.Sprintf("error retrieving vkcs_db_cluster %s", clusterID)
+	case errDBClusterUpdateWait:
+		newErrMsg = fmt.Sprintf("error waiting for vkcs_db_cluster %s to become ready", clusterID)
+
+	case errDBClusterUpdateDiskAutoexpand:
+		newErrMsg = fmt.Sprintf("error updating disk_autoexpand for vkcs_db_cluster %s", clusterID)
+	case errDBClusterUpdateDiskAutoexpandExtract:
+		newErrMsg = fmt.Sprintf("unable to determine disk_autoexpand from vkcs_db_cluster %s", clusterID)
+	case errDBClusterUpdateWalDiskAutoexpand:
+		newErrMsg = fmt.Sprintf("error updating wal_disk_autoexpand for vkcs_db_cluster %s", clusterID)
+	case errDBClusterUpdateWalDiskAutoexpandExtract:
+		newErrMsg = fmt.Sprintf("unable to determine wal_disk_autoexpand from vkcs_db_cluster %s", clusterID)
+	case errDBClusterUpdateCloudMonitoring:
+		newErrMsg = fmt.Sprintf("error updating cloud_monitoring_enabled for vkcs_db_cluster %s", clusterID)
+
+	case errDBClusterActionUpdateConfiguration:
+		newErrMsg = fmt.Sprintf("error updating configuration for vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionApplyCapabitilies:
+		newErrMsg = fmt.Sprintf("error updating capabilities for vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionApplyCapabilitiesExtract:
+		newErrMsg = fmt.Sprintf("error extracting capabilities for vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionResizeWalVolumeExtract:
+		newErrMsg = fmt.Sprintf("unable to determine wal_volume from vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionGrow:
+		newErrMsg = fmt.Sprintf("error growing vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionShrink:
+		newErrMsg = fmt.Sprintf("error shrinking vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionShrinkWrongOptions:
+		newErrMsg = fmt.Sprintf("invalid shrink options for vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionShrinkInstancesExtract:
+		newErrMsg = fmt.Sprintf("error determining instances to shrink vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionResizeVolume:
+		newErrMsg = fmt.Sprintf("error resizing volume for vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionResizeWalVolume:
+		newErrMsg = fmt.Sprintf("error resizing wal_volume for vkcs_db_cluster %s", clusterID)
+	case errDBClusterActionResizeFlavor:
+		newErrMsg = fmt.Sprintf("error changing flavor for vkcs_db_cluster %s", clusterID)
+	}
+
+	errMsg := strings.Replace(err.Error(), baseErr.Error(), newErrMsg, 1)
+	return diag.Errorf(errMsg)
 }

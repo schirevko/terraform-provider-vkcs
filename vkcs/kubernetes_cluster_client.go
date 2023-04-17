@@ -2,7 +2,6 @@ package vkcs
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,15 +12,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/containerinfra/v1/clustertemplates"
 )
 
-const magnumAPIMicroVersion = "1.28"
-
-var magnumAPIMicroVersionHeader = map[string]string{
-	"MCS-API-Version": fmt.Sprintf("container-infra %s", magnumAPIMicroVersion),
-}
-
-func addMagnumMicroVersionHeader(reqOpts *gophercloud.RequestOpts) {
-	reqOpts.MoreHeaders = magnumAPIMicroVersionHeader
-}
+const cloudContainersAPIVersion = "1.28"
 
 type node struct {
 	Name        string     `json:"name"`
