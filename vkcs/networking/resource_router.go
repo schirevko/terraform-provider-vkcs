@@ -9,12 +9,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/clients"
-	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/networking"
 	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/util"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/attributestags"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/routers"
+	irouters "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/networking/v2/routers"
 )
 
 func ResourceNetworkingRouter() *schema.Resource {
@@ -130,7 +130,7 @@ func resourceNetworkingRouterCreate(ctx context.Context, d *schema.ResourceData,
 		return diag.Errorf("Error creating VKCS networking client: %s", err)
 	}
 
-	createOpts := RouterCreateOpts{
+	createOpts := irouters.RouterCreateOpts{
 		CreateOpts: routers.CreateOpts{
 			Name:        d.Get("name").(string),
 			Description: d.Get("description").(string),
@@ -172,7 +172,7 @@ func resourceNetworkingRouterCreate(ctx context.Context, d *schema.ResourceData,
 	log.Printf("[DEBUG] vkcs_networking_router create options: %#v", createOpts)
 
 	// router creation without a retry
-	r, err = routers.Create(networkingClient, createOpts).Extract()
+	r, err = irouters.Create(networkingClient, createOpts).Extract()
 	if err != nil {
 		return diag.Errorf("Error creating vkcs_networking_router: %s", err)
 	}
@@ -204,7 +204,7 @@ func resourceNetworkingRouterCreate(ctx context.Context, d *schema.ResourceData,
 		updateOpts.GatewayInfo = &gatewayInfo
 
 		log.Printf("[DEBUG] Assigning external_gateway to vkcs_networking_router %s with options: %#v", r.ID, updateOpts)
-		_, err = routers.Update(networkingClient, r.ID, updateOpts).Extract()
+		_, err = irouters.Update(networkingClient, r.ID, updateOpts).Extract()
 		if err != nil {
 			return diag.Errorf("Error updating vkcs_networking_router: %s", err)
 		}
@@ -232,7 +232,7 @@ func resourceNetworkingRouterRead(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	var r routerExtended
-	err = networking.ExtractRouterInto(routers.Get(networkingClient, d.Id()), &r)
+	err = irouters.ExtractRouterInto(irouters.Get(networkingClient, d.Id()), &r)
 	if err != nil {
 		if _, ok := err.(gophercloud.ErrDefault404); ok {
 			d.SetId("")
@@ -312,7 +312,7 @@ func resourceNetworkingRouterUpdate(ctx context.Context, d *schema.ResourceData,
 
 	if hasChange {
 		log.Printf("[DEBUG] vkcs_networking_router %s update options: %#v", d.Id(), updateOpts)
-		_, err = routers.Update(networkingClient, d.Id(), updateOpts).Extract()
+		_, err = irouters.Update(networkingClient, d.Id(), updateOpts).Extract()
 		if err != nil {
 			return diag.Errorf("Error updating vkcs_networking_router: %s", err)
 		}
@@ -339,7 +339,7 @@ func resourceNetworkingRouterDelete(ctx context.Context, d *schema.ResourceData,
 		return diag.Errorf("Error creating VKCS networking client: %s", err)
 	}
 
-	if err := routers.Delete(networkingClient, d.Id()).ExtractErr(); err != nil {
+	if err := irouters.Delete(networkingClient, d.Id()).ExtractErr(); err != nil {
 		return diag.FromErr(util.CheckDeleted(d, err, "Error deleting vkcs_networking_router"))
 	}
 

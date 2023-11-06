@@ -173,9 +173,10 @@ func (r *BGPInstanceResource) Create(ctx context.Context, req resource.CreateReq
 		LongLivedGracefulRestart: util.ValueKnownBoolPointer(data.LongLivedGracefulRestart),
 	}
 
-	bgpInstanceResp, err := bgpinstances.Create(networkingClient, &bgpinstances.BGPInstanceCreate{BGPInstance: &bgpInstanceCreateOpts}).Extract()
+	result := bgpinstances.Create(networkingClient, &bgpinstances.BGPInstanceCreate{BGPInstance: &bgpInstanceCreateOpts})
+	bgpInstanceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_bgp_instance", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_bgp_instance", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	bgpInstanceID := bgpInstanceResp.ID
@@ -222,11 +223,12 @@ func (r *BGPInstanceResource) Read(ctx context.Context, req resource.ReadRequest
 
 	bgpInstanceID := data.ID.ValueString()
 
-	bgpInstanceResp, err := bgpinstances.Get(networkingClient, bgpInstanceID).Extract()
+	result := bgpinstances.Get(networkingClient, bgpInstanceID)
+	bgpInstanceResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_bgp_instance", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_bgp_instance", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -287,9 +289,10 @@ func (r *BGPInstanceResource) Update(ctx context.Context, req resource.UpdateReq
 		LongLivedGracefulRestart: util.ValueKnownBoolPointer(plan.LongLivedGracefulRestart),
 	}
 
-	bgpInstanceResp, err := bgpinstances.Update(networkingClient, bgpInstanceID, &bgpinstances.BGPInstanceUpdate{BGPInstance: &bgpInstanceUpdateOpts}).Extract()
+	result := bgpinstances.Update(networkingClient, bgpInstanceID, &bgpinstances.BGPInstanceUpdate{BGPInstance: &bgpInstanceUpdateOpts})
+	bgpInstanceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_bgp_instance", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_bgp_instance", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -333,9 +336,10 @@ func (r *BGPInstanceResource) Delete(ctx context.Context, req resource.DeleteReq
 
 	id := data.ID.ValueString()
 
-	err = bgpinstances.Delete(networkingClient, id).ExtractErr()
+	result := bgpinstances.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_bgp_instance", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_bgp_instance", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

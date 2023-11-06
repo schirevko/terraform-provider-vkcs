@@ -171,9 +171,10 @@ func resourceKeyManagerContainerCreate(ctx context.Context, d *schema.ResourceDa
 
 	log.Printf("[DEBUG] Create Options for vkcs_keymanager_container: %#v", createOpts)
 
-	container, err := containers.Create(kmClient, createOpts).Extract()
+	result := containers.Create(kmClient, createOpts)
+	container, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("Error creating vkcs_keymanager_container: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error creating vkcs_keymanager_container: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	uuid := GetUUIDfromContainerRef(container.ContainerRef)
@@ -221,9 +222,10 @@ func resourceKeyManagerContainerRead(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("Error creating VKCS keymanager client: %s", err)
 	}
 
-	container, err := containers.Get(kmClient, d.Id()).Extract()
+	result := containers.Get(kmClient, d.Id())
+	container, err := result.Extract()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error retrieving vkcs_keymanager_container"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error retrieving vkcs_keymanager_container"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	log.Printf("[DEBUG] Retrieved vkcs_keymanager_container %s: %#v", d.Id(), container)
@@ -261,9 +263,10 @@ func resourceKeyManagerContainerUpdate(ctx context.Context, d *schema.ResourceDa
 
 	if d.HasChange("acl") {
 		updateOpts := expandKeyManagerACLs(d.Get("acl"))
-		_, err := acls.UpdateContainerACL(kmClient, d.Id(), updateOpts).Extract()
+		result := acls.UpdateContainerACL(kmClient, d.Id(), updateOpts)
+		_, err := result.Extract()
 		if err != nil {
-			return diag.Errorf("Error updating vkcs_keymanager_container %s acl: %s", d.Id(), err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error updating vkcs_keymanager_container %s acl: %s", d.Id(), err), result.Header.Get(util.RequestIDHeader)))
 		}
 	}
 

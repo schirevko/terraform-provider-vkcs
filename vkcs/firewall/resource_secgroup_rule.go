@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -202,9 +203,10 @@ func resourceNetworkingSecGroupRuleCreate(ctx context.Context, d *schema.Resourc
 
 	log.Printf("[DEBUG] vkcs_networking_secgroup_rule create options: %#v", opts)
 
-	sgRule, err := rules.Create(networkingClient, opts).Extract()
+	result := rules.Create(networkingClient, opts)
+	sgRule, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("Error creating vkcs_networking_secgroup_rule: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error creating vkcs_networking_secgroup_rule: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	d.SetId(sgRule.ID)
@@ -222,9 +224,10 @@ func resourceNetworkingSecGroupRuleRead(ctx context.Context, d *schema.ResourceD
 
 	var sgRule secgroupRuleExtended
 
-	err = firewall.ExtractSecurityGroupRuleInto(rules.Get(networkingClient, d.Id()), &sgRule)
+	result := rules.Get(networkingClient, d.Id())
+	err = firewall.ExtractSecurityGroupRuleInto(result, &sgRule)
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error getting vkcs_networking_secgroup_rule"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error getting vkcs_networking_secgroup_rule"), result.Header.Get(util.RequestIDHeader)))
 	}
 	log.Printf("[DEBUG] Retrieved vkcs_networking_secgroup_rule %s: %#v", d.Id(), sgRule)
 
@@ -255,8 +258,9 @@ func resourceNetworkingSecGroupRuleDelete(ctx context.Context, d *schema.Resourc
 	mutex.Lock(securityGroupID)
 	defer mutex.Unlock(securityGroupID)
 
-	if err := rules.Delete(networkingClient, d.Id()).ExtractErr(); err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error deleting vkcs_networking_secgroup_rule"))
+	result := rules.Delete(networkingClient, d.Id())
+	if err := result.ExtractErr(); err != nil {
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error deleting vkcs_networking_secgroup_rule"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	stateConf := &retry.StateChangeConf{

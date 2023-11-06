@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/clients"
-	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/networking"
+	isubnets "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/networking/v2/subnets"
 	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/util"
 
 	"github.com/gophercloud/gophercloud"
@@ -197,7 +197,7 @@ func resourceNetworkingSubnetCreate(ctx context.Context, d *schema.ResourceData,
 	allocationPool := networkingSubnetGetRawAllocationPoolsValueToExpand(d)
 
 	// Set basic options.
-	createOpts := SubnetCreateOpts{
+	createOpts := isubnets.SubnetCreateOpts{
 		CreateOpts: subnets.CreateOpts{
 			NetworkID:       d.Get("network_id").(string),
 			Name:            d.Get("name").(string),
@@ -246,7 +246,7 @@ func resourceNetworkingSubnetCreate(ctx context.Context, d *schema.ResourceData,
 	createOpts.EnableDHCP = &enableDHCP
 
 	log.Printf("[DEBUG] vkcs_networking_subnet create options: %#v", createOpts)
-	s, err := subnets.Create(networkingClient, createOpts).Extract()
+	s, err := isubnets.Create(networkingClient, createOpts).Extract()
 	if err != nil {
 		return diag.Errorf("Error creating vkcs_networking_subnet: %s", err)
 	}
@@ -289,7 +289,7 @@ func resourceNetworkingSubnetRead(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	var s subnetExtended
-	err = networking.ExtractSubnetInto(subnets.Get(networkingClient, d.Id()), &s)
+	err = isubnets.ExtractSubnetInto(isubnets.Get(networkingClient, d.Id()), &s)
 	if err != nil {
 		return diag.FromErr(util.CheckDeleted(d, err, "Error getting vkcs_networking_subnet"))
 	}
@@ -389,7 +389,7 @@ func resourceNetworkingSubnetUpdate(ctx context.Context, d *schema.ResourceData,
 
 	if hasChange {
 		log.Printf("[DEBUG] Updating vkcs_networking_subnet %s with options: %#v", d.Id(), updateOpts)
-		_, err = subnets.Update(networkingClient, d.Id(), updateOpts).Extract()
+		_, err = isubnets.Update(networkingClient, d.Id(), updateOpts).Extract()
 		if err != nil {
 			return diag.Errorf("Error updating VKCS networking vkcs_networking_subnet %s: %s", d.Id(), err)
 		}

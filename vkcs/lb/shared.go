@@ -11,12 +11,16 @@ import (
 	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/util"
 
 	"github.com/gophercloud/gophercloud"
-	octavial7policies "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/l7policies"
-	octavialisteners "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/listeners"
-	octavialoadbalancers "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/loadbalancers"
+	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/l7policies"
+	listeners "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/listeners"
+	loadbalancers "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/loadbalancers"
 	octaviamonitors "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/monitors"
 	octaviapools "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/pools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	il7policies "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/lb/v2/l7policies"
+	ilisteners "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/lb/v2/listeners"
+	iloadbalancers "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/lb/v2/loadbalancers"
+	ipools "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/lb/v2/pools"
 )
 
 const (
@@ -56,7 +60,7 @@ func expandLBListenerHeadersMap(raw map[string]interface{}) (map[string]string, 
 	return m, nil
 }
 
-func waitForLBListener(ctx context.Context, lbClient *gophercloud.ServiceClient, listener *octavialisteners.Listener, target string, pending []string, timeout time.Duration) error {
+func waitForLBListener(ctx context.Context, lbClient *gophercloud.ServiceClient, listener *listeners.Listener, target string, pending []string, timeout time.Duration) error {
 	log.Printf("[DEBUG] Waiting for vkcs_lb_listener %s to become %s.", listener.ID, target)
 
 	if len(listener.Loadbalancers) == 0 {
@@ -88,7 +92,7 @@ func waitForLBListener(ctx context.Context, lbClient *gophercloud.ServiceClient,
 	return nil
 }
 
-func resourceLBListenerRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string, listener *octavialisteners.Listener) retry.StateRefreshFunc {
+func resourceLBListenerRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string, listener *listeners.Listener) retry.StateRefreshFunc {
 	if listener.ProvisioningStatus != "" {
 		return func() (interface{}, string, error) {
 			lb, status, err := resourceLBLoadBalancerRefreshFunc(lbClient, lbID)()
@@ -99,7 +103,7 @@ func resourceLBListenerRefreshFunc(lbClient *gophercloud.ServiceClient, lbID str
 				return lb, status, nil
 			}
 
-			listener, err := octavialisteners.Get(lbClient, listener.ID).Extract()
+			listener, err := ilisteners.Get(lbClient, listener.ID).Extract()
 			if err != nil {
 				return nil, "", err
 			}
@@ -141,7 +145,7 @@ func waitForLBLoadBalancer(ctx context.Context, lbClient *gophercloud.ServiceCli
 
 func resourceLBLoadBalancerRefreshFunc(lbClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		lb, err := octavialoadbalancers.Get(lbClient, id).Extract()
+		lb, err := iloadbalancers.Get(lbClient, id).Extract()
 		if err != nil {
 			return nil, "", err
 		}
@@ -192,7 +196,7 @@ func resourceLBMemberRefreshFunc(lbClient *gophercloud.ServiceClient, lbID strin
 				return lb, status, nil
 			}
 
-			member, err := octaviapools.GetMember(lbClient, poolID, member.ID).Extract()
+			member, err := ipools.GetMember(lbClient, poolID, member.ID).Extract()
 			if err != nil {
 				return nil, "", err
 			}
@@ -299,7 +303,7 @@ func resourceLBPoolRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string,
 				return lb, status, nil
 			}
 
-			pool, err := octaviapools.Get(lbClient, pool.ID).Extract()
+			pool, err := ipools.Get(lbClient, pool.ID).Extract()
 			if err != nil {
 				return nil, "", err
 			}
@@ -318,7 +322,7 @@ func lbFindLBIDviaPool(lbClient *gophercloud.ServiceClient, pool *octaviapools.P
 
 	if len(pool.Listeners) > 0 {
 		listenerID := pool.Listeners[0].ID
-		listener, err := octavialisteners.Get(lbClient, listenerID).Extract()
+		listener, err := ilisteners.Get(lbClient, listenerID).Extract()
 		if err != nil {
 			return "", err
 		}
@@ -333,7 +337,7 @@ func lbFindLBIDviaPool(lbClient *gophercloud.ServiceClient, pool *octaviapools.P
 
 func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.ServiceClient, lbID, resourceType, resourceID string, parentID string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		statuses, err := octavialoadbalancers.GetStatuses(lbClient, lbID).Extract()
+		statuses, err := iloadbalancers.GetStatuses(lbClient, lbID).Extract()
 		if err != nil {
 			if _, ok := err.(gophercloud.ErrDefault404); ok {
 				return nil, "", gophercloud.ErrDefault404{
@@ -349,8 +353,8 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 
 		// Don't fail, when statuses returns "null"
 		if statuses == nil || statuses.Loadbalancer == nil {
-			statuses = new(octavialoadbalancers.StatusTree)
-			statuses.Loadbalancer = new(octavialoadbalancers.LoadBalancer)
+			statuses = new(loadbalancers.StatusTree)
+			statuses.Loadbalancer = new(loadbalancers.LoadBalancer)
 		} else if !util.StrSliceContains(getLbSkipStatuses(), statuses.Loadbalancer.ProvisioningStatus) {
 			return statuses.Loadbalancer, statuses.Loadbalancer.ProvisioningStatus, nil
 		}
@@ -364,7 +368,7 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 					}
 				}
 			}
-			listener, err := octavialisteners.Get(lbClient, resourceID).Extract()
+			listener, err := ilisteners.Get(lbClient, resourceID).Extract()
 			return listener, "ACTIVE", err
 
 		case "pool":
@@ -375,7 +379,7 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 					}
 				}
 			}
-			pool, err := octaviapools.Get(lbClient, resourceID).Extract()
+			pool, err := ipools.Get(lbClient, resourceID).Extract()
 			return pool, "ACTIVE", err
 
 		case "monitor":
@@ -399,7 +403,7 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 					}
 				}
 			}
-			member, err := octaviapools.GetMember(lbClient, parentID, resourceID).Extract()
+			member, err := ipools.GetMember(lbClient, parentID, resourceID).Extract()
 			return member, "ACTIVE", err
 
 		case "l7policy":
@@ -412,7 +416,7 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 					}
 				}
 			}
-			l7policy, err := octavial7policies.Get(lbClient, resourceID).Extract()
+			l7policy, err := il7policies.Get(lbClient, resourceID).Extract()
 			return l7policy, "ACTIVE", err
 
 		case "l7rule":
@@ -427,7 +431,7 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 					}
 				}
 			}
-			l7Rule, err := octavial7policies.GetRule(lbClient, parentID, resourceID).Extract()
+			l7Rule, err := il7policies.GetRule(lbClient, parentID, resourceID).Extract()
 			return l7Rule, "ACTIVE", err
 		}
 
@@ -435,7 +439,7 @@ func resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient *gophercloud.Servic
 	}
 }
 
-func resourceLBL7PolicyRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string, l7policy *octavial7policies.L7Policy) retry.StateRefreshFunc {
+func resourceLBL7PolicyRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string, l7policy *l7policies.L7Policy) retry.StateRefreshFunc {
 	if l7policy.ProvisioningStatus != "" {
 		return func() (interface{}, string, error) {
 			lb, status, err := resourceLBLoadBalancerRefreshFunc(lbClient, lbID)()
@@ -446,7 +450,7 @@ func resourceLBL7PolicyRefreshFunc(lbClient *gophercloud.ServiceClient, lbID str
 				return lb, status, nil
 			}
 
-			l7policy, err := octavial7policies.Get(lbClient, l7policy.ID).Extract()
+			l7policy, err := il7policies.Get(lbClient, l7policy.ID).Extract()
 			if err != nil {
 				return nil, "", err
 			}
@@ -458,7 +462,7 @@ func resourceLBL7PolicyRefreshFunc(lbClient *gophercloud.ServiceClient, lbID str
 	return resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient, lbID, "l7policy", l7policy.ID, "")
 }
 
-func waitForLBL7Policy(ctx context.Context, lbClient *gophercloud.ServiceClient, parentListener *octavialisteners.Listener, l7policy *octavial7policies.L7Policy, target string, pending []string, timeout time.Duration) error {
+func waitForLBL7Policy(ctx context.Context, lbClient *gophercloud.ServiceClient, parentListener *listeners.Listener, l7policy *l7policies.L7Policy, target string, pending []string, timeout time.Duration) error {
 	log.Printf("[DEBUG] Waiting for l7policy %s to become %s.", l7policy.ID, target)
 
 	if len(parentListener.Loadbalancers) == 0 {
@@ -492,18 +496,18 @@ func waitForLBL7Policy(ctx context.Context, lbClient *gophercloud.ServiceClient,
 
 func getListenerIDForL7Policy(lbClient *gophercloud.ServiceClient, id string) (string, error) {
 	log.Printf("[DEBUG] Trying to get Listener ID associated with the %s L7 Policy ID", id)
-	lbsPages, err := octavialoadbalancers.List(lbClient, octavialoadbalancers.ListOpts{}).AllPages()
+	lbsPages, err := loadbalancers.List(lbClient, loadbalancers.ListOpts{}).AllPages()
 	if err != nil {
 		return "", fmt.Errorf("no Load Balancers were found: %s", err)
 	}
 
-	lbs, err := octavialoadbalancers.ExtractLoadBalancers(lbsPages)
+	lbs, err := loadbalancers.ExtractLoadBalancers(lbsPages)
 	if err != nil {
 		return "", fmt.Errorf("unable to extract Load Balancers list: %s", err)
 	}
 
 	for _, lb := range lbs {
-		statuses, err := octavialoadbalancers.GetStatuses(lbClient, lb.ID).Extract()
+		statuses, err := iloadbalancers.GetStatuses(lbClient, lb.ID).Extract()
 		if err != nil {
 			return "", fmt.Errorf("failed to get Load Balancer statuses: %s", err)
 		}
@@ -519,7 +523,7 @@ func getListenerIDForL7Policy(lbClient *gophercloud.ServiceClient, id string) (s
 	return "", fmt.Errorf("unable to find Listener ID associated with the %s L7 Policy ID", id)
 }
 
-func resourceLBL7RuleRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string, l7policyID string, l7rule *octavial7policies.Rule) retry.StateRefreshFunc {
+func resourceLBL7RuleRefreshFunc(lbClient *gophercloud.ServiceClient, lbID string, l7policyID string, l7rule *l7policies.Rule) retry.StateRefreshFunc {
 	if l7rule.ProvisioningStatus != "" {
 		return func() (interface{}, string, error) {
 			lb, status, err := resourceLBLoadBalancerRefreshFunc(lbClient, lbID)()
@@ -530,7 +534,7 @@ func resourceLBL7RuleRefreshFunc(lbClient *gophercloud.ServiceClient, lbID strin
 				return lb, status, nil
 			}
 
-			l7rule, err := octavial7policies.GetRule(lbClient, l7policyID, l7rule.ID).Extract()
+			l7rule, err := il7policies.GetRule(lbClient, l7policyID, l7rule.ID).Extract()
 			if err != nil {
 				return nil, "", err
 			}
@@ -542,7 +546,7 @@ func resourceLBL7RuleRefreshFunc(lbClient *gophercloud.ServiceClient, lbID strin
 	return resourceLBLoadBalancerStatusRefreshFuncNeutron(lbClient, lbID, "l7rule", l7rule.ID, l7policyID)
 }
 
-func waitForLBL7Rule(ctx context.Context, lbClient *gophercloud.ServiceClient, parentListener *octavialisteners.Listener, parentL7policy *octavial7policies.L7Policy, l7rule *octavial7policies.Rule, target string, pending []string, timeout time.Duration) error {
+func waitForLBL7Rule(ctx context.Context, lbClient *gophercloud.ServiceClient, parentListener *listeners.Listener, parentL7policy *l7policies.L7Policy, l7rule *l7policies.Rule, target string, pending []string, timeout time.Duration) error {
 	log.Printf("[DEBUG] Waiting for l7rule %s to become %s.", l7rule.ID, target)
 
 	if len(parentListener.Loadbalancers) == 0 {

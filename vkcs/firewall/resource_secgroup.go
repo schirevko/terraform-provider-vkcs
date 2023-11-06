@@ -2,6 +2,7 @@ package firewall
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -101,9 +102,10 @@ func resourceNetworkingSecGroupCreate(ctx context.Context, d *schema.ResourceDat
 	}
 
 	log.Printf("[DEBUG] vkcs_networking_secgroup create options: %#v", opts)
-	sg, err := groups.Create(networkingClient, opts).Extract()
+	result := groups.Create(networkingClient, opts)
+	sg, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("Error creating vkcs_networking_secgroup: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error creating vkcs_networking_secgroup: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	d.SetId(sg.ID)
@@ -112,9 +114,10 @@ func resourceNetworkingSecGroupCreate(ctx context.Context, d *schema.ResourceDat
 	deleteDefaultRules := d.Get("delete_default_rules").(bool)
 	if deleteDefaultRules {
 		sgID := sg.ID
-		sg, err := groups.Get(networkingClient, sgID).Extract()
+		result := groups.Get(networkingClient, sgID)
+		sg, err := result.Extract()
 		if err != nil {
-			return diag.Errorf("Error retrieving the created vkcs_networking_secgroup %s: %s", sgID, err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error retrieving the created vkcs_networking_secgroup %s: %s", sgID, err), result.Header.Get(util.RequestIDHeader)))
 		}
 
 		for _, rule := range sg.Rules {
@@ -127,9 +130,10 @@ func resourceNetworkingSecGroupCreate(ctx context.Context, d *schema.ResourceDat
 	tags := networking.NetworkingAttributesTags(d)
 	if len(tags) > 0 {
 		tagOpts := attributestags.ReplaceAllOpts{Tags: tags}
-		tags, err := attributestags.ReplaceAll(networkingClient, "security-groups", sg.ID, tagOpts).Extract()
+		result := attributestags.ReplaceAll(networkingClient, "security-groups", sg.ID, tagOpts)
+		tags, err := result.Extract()
 		if err != nil {
-			return diag.Errorf("Error setting tags on vkcs_networking_secgroup %s: %s", sg.ID, err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error setting tags on vkcs_networking_secgroup %s: %s", sg.ID, err), result.Header.Get(util.RequestIDHeader)))
 		}
 		log.Printf("[DEBUG] Set tags %s on vkcs_networking_secgroup %s", tags, sg.ID)
 	}
@@ -148,9 +152,10 @@ func resourceNetworkingSecGroupRead(ctx context.Context, d *schema.ResourceData,
 
 	var sg securityGroupExtended
 
-	err = firewall.ExtractSecurityGroupInto(groups.Get(networkingClient, d.Id()), &sg)
+	result := groups.Get(networkingClient, d.Id())
+	err = firewall.ExtractSecurityGroupInto(result, &sg)
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error retrieving vkcs_networking_secgroup"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error retrieving vkcs_networking_secgroup"), result.Header.Get(util.RequestIDHeader)))
 	}
 	d.Set("description", sg.Description)
 	d.Set("name", sg.Name)
@@ -187,18 +192,20 @@ func resourceNetworkingSecGroupUpdate(ctx context.Context, d *schema.ResourceDat
 
 	if updated {
 		log.Printf("[DEBUG] Updating vkcs_networking_secgroup %s with options: %#v", d.Id(), updateOpts)
-		_, err = groups.Update(networkingClient, d.Id(), updateOpts).Extract()
+		result := groups.Update(networkingClient, d.Id(), updateOpts)
+		_, err = result.Extract()
 		if err != nil {
-			return diag.Errorf("Error updating vkcs_networking_secgroup: %s", err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error updating vkcs_networking_secgroup: %s", err), result.Header.Get(util.RequestIDHeader)))
 		}
 	}
 
 	if d.HasChange("tags") {
 		tags := networking.NetworkingV2UpdateAttributesTags(d)
 		tagOpts := attributestags.ReplaceAllOpts{Tags: tags}
-		tags, err := attributestags.ReplaceAll(networkingClient, "security-groups", d.Id(), tagOpts).Extract()
+		result := attributestags.ReplaceAll(networkingClient, "security-groups", d.Id(), tagOpts)
+		tags, err := result.Extract()
 		if err != nil {
-			return diag.Errorf("Error setting tags on vkcs_networking_secgroup %s: %s", d.Id(), err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error setting tags on vkcs_networking_secgroup %s: %s", d.Id(), err), result.Header.Get(util.RequestIDHeader)))
 		}
 		log.Printf("[DEBUG] Set tags %s on vkcs_networking_secgroup %s", tags, d.Id())
 	}

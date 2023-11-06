@@ -575,9 +575,10 @@ func resourceDatabaseClusterCreate(ctx context.Context, d *schema.ResourceData, 
 	clust := clusters.Cluster{}
 	clust.Cluster = createOpts
 
-	cluster, err := clusters.Create(DatabaseV1Client, clust).Extract()
+	result := clusters.Create(DatabaseV1Client, clust)
+	cluster, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("error creating vkcs_db_cluster: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating vkcs_db_cluster: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	// Store the ID now
@@ -614,10 +615,11 @@ func resourceDatabaseClusterCreate(ctx context.Context, d *schema.ResourceData, 
 		}
 		attachConfigurationOpts.ConfigurationAttach.ConfigurationID = configuration.(string)
 
-		err := clusters.ClusterAction(DatabaseV1Client, cluster.ID, &attachConfigurationOpts).ExtractErr()
+		result := clusters.ClusterAction(DatabaseV1Client, cluster.ID, &attachConfigurationOpts)
+		err := result.ExtractErr()
 		if err != nil {
-			return diag.Errorf("error attaching configuration group %s to vkcs_db_cluster %s: %s",
-				configuration, cluster.ID, err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error attaching configuration group %s to vkcs_db_cluster %s: %s",
+				configuration, cluster.ID, err), result.Header.Get(util.RequestIDHeader)))
 		}
 
 		stateConf := &retry.StateChangeConf{
@@ -662,9 +664,10 @@ func resourceDatabaseClusterRead(ctx context.Context, d *schema.ResourceData, me
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	cluster, err := clusters.Get(DatabaseV1Client, d.Id()).Extract()
+	result := clusters.Get(DatabaseV1Client, d.Id())
+	cluster, err := result.Extract()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error retrieving vkcs_db_cluster"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error retrieving vkcs_db_cluster"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	log.Printf("[DEBUG] Retrieved vkcs_db_cluster %s: %#v", d.Id(), cluster)
@@ -858,9 +861,10 @@ func resourceDatabaseClusterDelete(ctx context.Context, d *schema.ResourceData, 
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	err = clusters.Delete(DatabaseV1Client, d.Id()).ExtractErr()
+	result := clusters.Delete(DatabaseV1Client, d.Id())
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error deleting vkcs_db_cluster"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error deleting vkcs_db_cluster"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	stateConf := &retry.StateChangeConf{

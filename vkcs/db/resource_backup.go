@@ -277,9 +277,10 @@ func (r *BackupResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	tflog.Debug(ctx, "Calling Databases API to create the backup", map[string]interface{}{"opts": fmt.Sprintf("%#v", opts)})
 
-	backup, err := backups.Create(client, &opts).Extract()
+	result := backups.Create(client, &opts)
+	backup, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error calling VKCS Databases API to create a backup", err.Error())
+		resp.Diagnostics.AddError("Error calling VKCS Databases API to create a backup", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -354,13 +355,14 @@ func (r *BackupResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	tflog.Debug(ctx, "Calling Databases API to read the backup")
 
-	backup, err := backups.Get(client, id).Extract()
+	result := backups.Get(client, id)
+	backup, err := result.Extract()
 	if errutil.Is(err, 404) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 	if err != nil {
-		resp.Diagnostics.AddError("Error calling VKCS Databases API", err.Error())
+		resp.Diagnostics.AddError("Error calling VKCS Databases API", util.MessageWithRequestID(err.Error(), util.RequestIDHeader))
 		return
 	}
 
@@ -432,9 +434,10 @@ func (r *BackupResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	tflog.Debug(ctx, "Calling Databases API to delete the backup")
 
-	err = backups.Delete(client, id).ExtractErr()
+	result := backups.Delete(client, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Error calling VKCS Databases API", err.Error())
+		resp.Diagnostics.AddError("Error calling VKCS Databases API", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 

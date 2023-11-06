@@ -6,6 +6,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/pagination"
 	v1 "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/containerinfraaddons/v1"
+	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/util"
 )
 
 type OptsBuilder interface {
@@ -38,6 +39,9 @@ func GetAvailableAddon(client *gophercloud.ServiceClient, clusterID, addonID str
 		OkCodes: []int{200},
 	})
 	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	if r.Err != nil {
+		r.Err = util.ErrorWithRequestID(r.Err, r.Header.Get(util.RequestIDHeader))
+	}
 	return
 }
 
@@ -63,5 +67,8 @@ func InstallAddonToCluster(client *gophercloud.ServiceClient, addonID, clusterID
 		OkCodes: []int{200},
 	})
 	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	if r.Err != nil {
+		r.Err = util.ErrorWithRequestID(r.Err, r.Header.Get(util.RequestIDHeader))
+	}
 	return
 }

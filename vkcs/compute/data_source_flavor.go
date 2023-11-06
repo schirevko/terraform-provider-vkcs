@@ -11,6 +11,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	iflavors "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/compute/v2/flavors"
 )
 
 func DataSourceComputeFlavor() *schema.Resource {
@@ -127,7 +128,7 @@ func dataSourceComputeFlavorRead(ctx context.Context, d *schema.ResourceData, me
 
 	var allFlavors []flavors.Flavor
 	if v := d.Get("flavor_id").(string); v != "" {
-		flavor, err := flavors.Get(computeClient, v).Extract()
+		flavor, err := iflavors.Get(computeClient, v).Extract()
 		if err != nil {
 			if _, ok := err.(gophercloud.ErrDefault404); ok {
 				return diag.Errorf("No Flavor found")
@@ -241,7 +242,7 @@ func dataSourceComputeFlavorAttributes(d *schema.ResourceData, computeClient *go
 	d.Set("vcpus", flavor.VCPUs)
 	d.Set("is_public", flavor.IsPublic)
 
-	es, err := flavors.ListExtraSpecs(computeClient, d.Id()).Extract()
+	es, err := iflavors.ListExtraSpecs(computeClient, d.Id()).Extract()
 	if err != nil {
 		return err
 	}

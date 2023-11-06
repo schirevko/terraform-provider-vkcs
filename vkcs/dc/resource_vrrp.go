@@ -161,9 +161,10 @@ func (r *VRRPResource) Create(ctx context.Context, req resource.CreateRequest, r
 		Enabled:        util.ValueKnownBoolPointer(data.Enabled),
 	}
 
-	vrrpResp, err := vrrps.Create(networkingClient, &vrrps.VRRPCreate{VRRP: &vrrpCreateOpts}).Extract()
+	result := vrrps.Create(networkingClient, &vrrps.VRRPCreate{VRRP: &vrrpCreateOpts})
+	vrrpResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_vrrp", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_vrrp", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	vrrpID := vrrpResp.ID
@@ -208,11 +209,12 @@ func (r *VRRPResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	vrrpID := data.ID.ValueString()
 
-	vrrpResp, err := vrrps.Get(networkingClient, vrrpID).Extract()
+	result := vrrps.Get(networkingClient, vrrpID)
+	vrrpResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_vrrp", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_vrrp", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -271,9 +273,10 @@ func (r *VRRPResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		Enabled:        util.ValueKnownBoolPointer(plan.Enabled),
 	}
 
-	vrrpResp, err := vrrps.Update(networkingClient, vrrpID, &vrrps.VRRPUpdate{VRRP: &vrrpUpdateOpts}).Extract()
+	result := vrrps.Update(networkingClient, vrrpID, &vrrps.VRRPUpdate{VRRP: &vrrpUpdateOpts})
+	vrrpResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_vrrp", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_vrrp", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -316,9 +319,10 @@ func (r *VRRPResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 
 	id := data.ID.ValueString()
 
-	err = vrrps.Delete(networkingClient, id).ExtractErr()
+	result := vrrps.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_vrrp", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_vrrp", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

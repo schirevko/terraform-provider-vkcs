@@ -612,9 +612,11 @@ func resourceDatabaseInstanceCreate(ctx context.Context, d *schema.ResourceData,
 
 	inst := instances.Instance{}
 	inst.Instance = createOpts
-	instance, err := instances.Create(DatabaseV1Client, &inst).Extract()
+
+	result := instances.Create(DatabaseV1Client, &inst)
+	instance, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("error creating vkcs_db_instance: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating vkcs_db_instance: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	// Store the ID now
@@ -651,10 +653,11 @@ func resourceDatabaseInstanceCreate(ctx context.Context, d *schema.ResourceData,
 		}
 		attachConfigurationOpts.Instance.Configuration = configuration
 
-		err := instances.AttachConfigurationGroup(DatabaseV1Client, instance.ID, &attachConfigurationOpts).ExtractErr()
+		result := instances.AttachConfigurationGroup(DatabaseV1Client, instance.ID, &attachConfigurationOpts)
+		err := result.ExtractErr()
 		if err != nil {
-			return diag.Errorf("error attaching configuration group %s to vkcs_db_instance %s: %s",
-				configuration, instance.ID, err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error attaching configuration group %s to vkcs_db_instance %s: %s",
+				configuration, instance.ID, err), result.Header.Get(util.RequestIDHeader)))
 		}
 	}
 
@@ -665,9 +668,10 @@ func resourceDatabaseInstanceCreate(ctx context.Context, d *schema.ResourceData,
 			if rootPassword != "" {
 				rootUserEnableOpts.Password = rootPassword.(string)
 			}
-			rootUser, err := instances.RootUserEnable(DatabaseV1Client, instance.ID, &rootUserEnableOpts).Extract()
+			result := instances.RootUserEnable(DatabaseV1Client, instance.ID, &rootUserEnableOpts)
+			rootUser, err := result.Extract()
 			if err != nil {
-				return diag.Errorf("error creating root user for instance: %s: %s", instance.ID, err)
+				return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating root user for instance: %s: %s", instance.ID, err), result.Header.Get(util.RequestIDHeader)))
 			}
 			d.Set("root_password", rootUser.Password)
 		}
@@ -716,9 +720,10 @@ func resourceDatabaseInstanceRead(ctx context.Context, d *schema.ResourceData, m
 		d.Set("replica_of", instance.ReplicaOf.ID)
 	}
 
-	backupSchedule, err := instances.GetBackupSchedule(DatabaseV1Client, d.Id()).Extract()
+	result := instances.GetBackupSchedule(DatabaseV1Client, d.Id())
+	backupSchedule, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("error getting backup schedule for instance: %s: %s", d.Id(), err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error getting backup schedule for instance: %s: %s", d.Id(), err), result.Header.Get(util.RequestIDHeader)))
 	}
 	if backupSchedule != nil {
 		flattened := flattenDatabaseBackupSchedule(*backupSchedule)
@@ -1067,9 +1072,10 @@ func resourceDatabaseInstanceDelete(ctx context.Context, d *schema.ResourceData,
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	err = instances.Delete(DatabaseV1Client, d.Id()).ExtractErr()
+	result := instances.Delete(DatabaseV1Client, d.Id())
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error deleting vkcs_db_instance"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error deleting vkcs_db_instance"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	stateConf := &retry.StateChangeConf{

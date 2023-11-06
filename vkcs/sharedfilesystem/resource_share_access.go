@@ -17,6 +17,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/errors"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/shares"
+	ishares "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/sharedfilesystem/v2/shares"
 )
 
 func ResourceSharedFilesystemShareAccess() *schema.Resource {
@@ -109,7 +110,7 @@ func resourceSharedFilesystemShareAccessCreate(ctx context.Context, d *schema.Re
 
 	var access *shares.AccessRight
 	err = retry.RetryContext(ctx, timeout, func() *retry.RetryError {
-		access, err = shares.GrantAccess(sfsClient, shareID, grantOpts).Extract()
+		access, err = ishares.GrantAccess(sfsClient, shareID, grantOpts).Extract()
 		if err != nil {
 			return util.CheckForRetryableError(err)
 		}
@@ -158,7 +159,7 @@ func resourceSharedFilesystemShareAccessRead(ctx context.Context, d *schema.Reso
 	sfsClient.Microversion = SharedFilesystemMinMicroversion
 
 	shareID := d.Get("share_id").(string)
-	access, err := shares.ListAccessRights(sfsClient, shareID).Extract()
+	access, err := ishares.ListAccessRights(sfsClient, shareID).Extract()
 	if err != nil {
 		return diag.FromErr(util.CheckDeleted(d, err, "Error retrieving vkcs_sharedfilesystem_share_access"))
 	}
@@ -197,7 +198,7 @@ func resourceSharedFilesystemShareAccessDelete(ctx context.Context, d *schema.Re
 
 	log.Printf("[DEBUG] Attempting to delete vkcs_sharedfilesystem_share_access %s", d.Id())
 	err = retry.RetryContext(ctx, timeout, func() *retry.RetryError {
-		err = shares.RevokeAccess(sfsClient, shareID, revokeOpts).ExtractErr()
+		err = ishares.RevokeAccess(sfsClient, shareID, revokeOpts).ExtractErr()
 		if err != nil {
 			return util.CheckForRetryableError(err)
 		}
@@ -258,7 +259,7 @@ func resourceSharedFilesystemShareAccessImport(ctx context.Context, d *schema.Re
 	shareID := parts[0]
 	accessID := parts[1]
 
-	access, err := shares.ListAccessRights(sfsClient, shareID).Extract()
+	access, err := ishares.ListAccessRights(sfsClient, shareID).Extract()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get %s vkcs_sharedfilesystem_share: %s", shareID, err)
 	}

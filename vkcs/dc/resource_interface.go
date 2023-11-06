@@ -190,9 +190,10 @@ func (r *InterfaceResource) Create(ctx context.Context, req resource.CreateReque
 		BGPAnnounceEnabled: util.ValueKnownBoolPointer(data.BGPAnnounceEnabled),
 	}
 
-	interfaceResp, err := interfaces.Create(networkingClient, &interfaces.InterfaceCreate{Interface: &interfaceCreateOpts}).Extract()
+	result := interfaces.Create(networkingClient, &interfaces.InterfaceCreate{Interface: &interfaceCreateOpts})
+	interfaceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_interface", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_interface", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	interfaceID := interfaceResp.ID
@@ -242,11 +243,12 @@ func (r *InterfaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 
 	interfaceID := data.ID.ValueString()
 
-	interfaceResp, err := interfaces.Get(networkingClient, interfaceID).Extract()
+	result := interfaces.Get(networkingClient, interfaceID)
+	interfaceResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_interface", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_interface", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -307,9 +309,10 @@ func (r *InterfaceResource) Update(ctx context.Context, req resource.UpdateReque
 		BGPAnnounceEnabled: util.ValueKnownBoolPointer(plan.BGPAnnounceEnabled),
 	}
 
-	interfaceResp, err := interfaces.Update(networkingClient, interfaceID, &interfaces.InterfaceUpdate{Interface: &interfaceUpdateOpts}).Extract()
+	result := interfaces.Update(networkingClient, interfaceID, &interfaces.InterfaceUpdate{Interface: &interfaceUpdateOpts})
+	interfaceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_interface", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_interface", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -356,9 +359,10 @@ func (r *InterfaceResource) Delete(ctx context.Context, req resource.DeleteReque
 
 	id := data.ID.ValueString()
 
-	err = interfaces.Delete(networkingClient, id).ExtractErr()
+	result := interfaces.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_interface", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_interface", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

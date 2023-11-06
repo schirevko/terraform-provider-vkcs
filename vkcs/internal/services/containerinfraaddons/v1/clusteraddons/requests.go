@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/util"
 )
 
 type OptsBuilder interface {
@@ -54,6 +55,9 @@ func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
 		OkCodes: []int{200},
 	})
 	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	if r.Err != nil {
+		r.Err = util.ErrorWithRequestID(r.Err, r.Header.Get(util.RequestIDHeader))
+	}
 	return
 }
 
@@ -67,6 +71,9 @@ func Upgrade(client *gophercloud.ServiceClient, id string, opts OptsBuilder) (r 
 		OkCodes: []int{200},
 	})
 	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	if r.Err != nil {
+		r.Err = util.ErrorWithRequestID(r.Err, r.Header.Get(util.RequestIDHeader))
+	}
 	return
 }
 
@@ -80,6 +87,9 @@ func Update(client *gophercloud.ServiceClient, id string, opts OptsBuilder) (r U
 		OkCodes: []int{200},
 	})
 	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	if r.Err != nil {
+		r.Err = util.ErrorWithRequestID(r.Err, r.Header.Get(util.RequestIDHeader))
+	}
 	return
 }
 
@@ -88,5 +98,8 @@ func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
 		OkCodes: []int{200},
 	})
 	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	if r.Err != nil {
+		r.Err = util.ErrorWithRequestID(r.Err, r.Header.Get(util.RequestIDHeader))
+	}
 	return
 }

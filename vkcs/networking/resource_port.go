@@ -16,6 +16,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/extradhcpopts"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
+	iports "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/networking/v2/ports"
 )
 
 func ResourceNetworkingPort() *schema.Resource {
@@ -269,7 +270,7 @@ func resourceNetworkingPortCreate(ctx context.Context, d *schema.ResourceData, m
 	}
 
 	allowedAddressPairs := d.Get("allowed_address_pairs").(*schema.Set)
-	createOpts := PortCreateOpts{
+	createOpts := iports.PortCreateOpts{
 		CreateOpts: ports.CreateOpts{
 			Name:                d.Get("name").(string),
 			Description:         d.Get("description").(string),
@@ -329,7 +330,7 @@ func resourceNetworkingPortCreate(ctx context.Context, d *schema.ResourceData, m
 	// Create a Neutron port and set extra options if they're specified.
 	var port portExtended
 
-	err = ports.Create(networkingClient, finalCreateOpts).ExtractInto(&port)
+	err = iports.Create(networkingClient, finalCreateOpts).ExtractInto(&port)
 	if err != nil {
 		return diag.Errorf("Error creating vkcs_networking_port: %s", err)
 	}
@@ -373,7 +374,7 @@ func resourceNetworkingPortRead(ctx context.Context, d *schema.ResourceData, met
 	}
 
 	var port portExtended
-	err = ports.Get(networkingClient, d.Id()).ExtractInto(&port)
+	err = iports.Get(networkingClient, d.Id()).ExtractInto(&port)
 	if err != nil {
 		return diag.FromErr(util.CheckDeleted(d, err, "Error getting vkcs_networking_port"))
 	}

@@ -249,25 +249,19 @@ func Create(client *gophercloud.ServiceClient, opts OptsBuilder) (r CreateResult
 		r.Err = err
 		return
 	}
-	var result *http.Response
-	result, r.Err = client.Post(instancesURL(client), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(instancesURL(client), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get performs request to get database instance
 func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	var result *http.Response
-	result, r.Err = client.Get(instanceURL(client, id), &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Get(instanceURL(client, id), &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -283,13 +277,10 @@ func GetCapabilities(client *gophercloud.ServiceClient, id string) (r GetCapabil
 }
 
 func GetBackupSchedule(client *gophercloud.ServiceClient, id string) (r GetBackupScheduleResult) {
-	var result *http.Response
-	result, r.Err = client.Get(backupScheduleURL(client, id), &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Get(backupScheduleURL(client, id), &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -351,13 +342,10 @@ func AttachConfigurationGroup(client *gophercloud.ServiceClient, id string, opts
 		r.Err = err
 		return
 	}
-	var result *http.Response
-	result, r.Err = client.Put(instanceURL(client, id), b, nil, &gophercloud.RequestOpts{
+	resp, err := client.Put(instanceURL(client, id), b, nil, &gophercloud.RequestOpts{
 		OkCodes: []int{202},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -385,13 +373,10 @@ func RootUserEnable(client *gophercloud.ServiceClient, id string, opts OptsBuild
 		r.Err = err
 		return
 	}
-	var result *http.Response
-	result, r.Err = client.Post(rootUserURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(rootUserURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -437,11 +422,8 @@ func UpdateBackupSchedule(client *gophercloud.ServiceClient, id string, opts Opt
 
 // Delete performs request to delete database instance
 func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	var result *http.Response
-	result, r.Err = client.Delete(instanceURL(client, id), &gophercloud.RequestOpts{})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	resp, err := client.Delete(instanceURL(client, id), &gophercloud.RequestOpts{})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 

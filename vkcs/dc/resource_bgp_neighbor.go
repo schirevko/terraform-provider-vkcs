@@ -194,9 +194,10 @@ func (r *BGPNeighborResource) Create(ctx context.Context, req resource.CreateReq
 		Enabled:              util.ValueKnownBoolPointer(data.Enabled),
 	}
 
-	bgpNeighborResp, err := bgpneighbors.Create(networkingClient, &bgpneighbors.BGPNeighborCreate{BGPNeighbor: &bgpNeighborCreateOpts}).Extract()
+	result := bgpneighbors.Create(networkingClient, &bgpneighbors.BGPNeighborCreate{BGPNeighbor: &bgpNeighborCreateOpts})
+	bgpNeighborResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_bgp_neighbor", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_bgp_neighbor", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	bgpNeighborID := bgpNeighborResp.ID
@@ -244,11 +245,12 @@ func (r *BGPNeighborResource) Read(ctx context.Context, req resource.ReadRequest
 
 	bgpNeighborID := data.ID.ValueString()
 
-	bgpNeighborResp, err := bgpneighbors.Get(networkingClient, bgpNeighborID).Extract()
+	result := bgpneighbors.Get(networkingClient, bgpNeighborID)
+	bgpNeighborResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_bgp_neighbor", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_bgp_neighbor", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -313,9 +315,10 @@ func (r *BGPNeighborResource) Update(ctx context.Context, req resource.UpdateReq
 		Enabled:              util.ValueKnownBoolPointer(plan.Enabled),
 	}
 
-	bgpNeighborResp, err := bgpneighbors.Update(networkingClient, bgpNeighborID, &bgpneighbors.BGPNeighborUpdate{BGPNeighbor: &bgpNeighborUpdateOpts}).Extract()
+	result := bgpneighbors.Update(networkingClient, bgpNeighborID, &bgpneighbors.BGPNeighborUpdate{BGPNeighbor: &bgpNeighborUpdateOpts})
+	bgpNeighborResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_bgp_instance", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_bgp_instance", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -361,9 +364,10 @@ func (r *BGPNeighborResource) Delete(ctx context.Context, req resource.DeleteReq
 
 	id := data.ID.ValueString()
 
-	err = bgpneighbors.Delete(networkingClient, id).ExtractErr()
+	result := bgpneighbors.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_bgp_neighbor", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_bgp_neighbor", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

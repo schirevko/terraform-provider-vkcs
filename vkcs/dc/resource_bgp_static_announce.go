@@ -148,9 +148,10 @@ func (r *BGPStaticAnnounceResource) Create(ctx context.Context, req resource.Cre
 		Enabled:     util.ValueKnownBoolPointer(data.Enabled),
 	}
 
-	bgpStaticAnnounceResp, err := bgpstaticannounces.Create(networkingClient, &bgpstaticannounces.BGPStaticAnnounceCreate{BGPStaticAnnounce: &bgpStaticAnnounceCreateOpts}).Extract()
+	result := bgpstaticannounces.Create(networkingClient, &bgpstaticannounces.BGPStaticAnnounceCreate{BGPStaticAnnounce: &bgpStaticAnnounceCreateOpts})
+	bgpStaticAnnounceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_bgp_static_announce", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_bgp_static_announce", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	bgpStaticAnnounceID := bgpStaticAnnounceResp.ID
@@ -193,11 +194,12 @@ func (r *BGPStaticAnnounceResource) Read(ctx context.Context, req resource.ReadR
 
 	bgpStaticAnnounceID := data.ID.ValueString()
 
-	bgpStaticAnnounceResp, err := bgpstaticannounces.Get(networkingClient, bgpStaticAnnounceID).Extract()
+	result := bgpstaticannounces.Get(networkingClient, bgpStaticAnnounceID)
+	bgpStaticAnnounceResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_bgp_static_announce", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_bgp_static_announce", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -252,9 +254,10 @@ func (r *BGPStaticAnnounceResource) Update(ctx context.Context, req resource.Upd
 		Enabled:     util.ValueKnownBoolPointer(plan.Enabled),
 	}
 
-	bgpStaticAnnounceResp, err := bgpstaticannounces.Update(networkingClient, bgpStaticAnnounceID, &bgpstaticannounces.BGPStaticAnnounceUpdate{BGPStaticAnnounce: &bgpStaticAnnounceUpdateOpts}).Extract()
+	result := bgpstaticannounces.Update(networkingClient, bgpStaticAnnounceID, &bgpstaticannounces.BGPStaticAnnounceUpdate{BGPStaticAnnounce: &bgpStaticAnnounceUpdateOpts})
+	bgpStaticAnnounceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_bgp_static_announce", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_bgp_static_announce", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -295,9 +298,10 @@ func (r *BGPStaticAnnounceResource) Delete(ctx context.Context, req resource.Del
 
 	id := data.ID.ValueString()
 
-	err = bgpstaticannounces.Delete(networkingClient, id).ExtractErr()
+	result := bgpstaticannounces.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_bgp_static_announce", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_bgp_static_announce", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

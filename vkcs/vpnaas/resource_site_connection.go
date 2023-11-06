@@ -15,6 +15,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/vpnaas/siteconnections"
+	isiteconnections "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/vpnaas/v2/siteconnections"
 )
 
 func ResourceSiteConnection() *schema.Resource {
@@ -199,7 +200,7 @@ func resourceSiteConnectionCreate(ctx context.Context, d *schema.ResourceData, m
 
 	log.Printf("[DEBUG] Create site connection: %#v", createOpts)
 
-	conn, err := siteconnections.Create(networkingClient, createOpts).Extract()
+	conn, err := isiteconnections.Create(networkingClient, createOpts).Extract()
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -234,7 +235,7 @@ func resourceSiteConnectionRead(ctx context.Context, d *schema.ResourceData, met
 		return diag.Errorf("Error creating VKCS networking client: %s", err)
 	}
 
-	conn, err := siteconnections.Get(networkingClient, d.Id()).Extract()
+	conn, err := isiteconnections.Get(networkingClient, d.Id()).Extract()
 	if err != nil {
 		return diag.FromErr(util.CheckDeleted(d, err, "site_connection"))
 	}
@@ -413,7 +414,7 @@ func resourceSiteConnectionDelete(ctx context.Context, d *schema.ResourceData, m
 
 func waitForSiteConnectionDeletion(networkingClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		conn, err := siteconnections.Get(networkingClient, id).Extract()
+		conn, err := isiteconnections.Get(networkingClient, id).Extract()
 		log.Printf("[DEBUG] Got site connection %s => %#v", id, conn)
 
 		if err != nil {
@@ -431,7 +432,7 @@ func waitForSiteConnectionDeletion(networkingClient *gophercloud.ServiceClient, 
 
 func waitForSiteConnectionCreation(networkingClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		service, err := siteconnections.Get(networkingClient, id).Extract()
+		service, err := isiteconnections.Get(networkingClient, id).Extract()
 		if err != nil {
 			return "", "NOT_CREATED", nil
 		}
@@ -441,7 +442,7 @@ func waitForSiteConnectionCreation(networkingClient *gophercloud.ServiceClient, 
 
 func waitForSiteConnectionUpdate(networkingClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		conn, err := siteconnections.Get(networkingClient, id).Extract()
+		conn, err := isiteconnections.Get(networkingClient, id).Extract()
 		if err != nil {
 			return "", "PENDING_UPDATE", nil
 		}

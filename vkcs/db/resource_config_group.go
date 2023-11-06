@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -112,9 +113,10 @@ func resourceDatabaseConfigGroupCreate(ctx context.Context, d *schema.ResourceDa
 		Configuration: &createOpts,
 	}
 
-	configGroup, err := cg.Create(DatabaseV1Client, &configGrp).Extract()
+	result := cg.Create(DatabaseV1Client, &configGrp)
+	configGroup, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("error creating vkcs_db_config_group: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating vkcs_db_config_group: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	// Store the ID now
@@ -130,9 +132,10 @@ func resourceDatabaseConfigGroupRead(ctx context.Context, d *schema.ResourceData
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	configGroup, err := cg.Get(DatabaseV1Client, d.Id()).Extract()
+	result := cg.Get(DatabaseV1Client, d.Id())
+	configGroup, err := result.Extract()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error retrieving vkcs_db_config_group"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error retrieving vkcs_db_config_group"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	log.Printf("[DEBUG] Retrieved vkcs_db_config_group %s: %#v", d.Id(), configGroup)
@@ -182,9 +185,10 @@ func resourceDatabaseConfigGroupUpdate(ctx context.Context, d *schema.ResourceDa
 		Configuration: &updateOpts,
 	}
 
-	err = cg.Update(DatabaseV1Client, d.Id(), &update).ExtractErr()
+	result := cg.Update(DatabaseV1Client, d.Id(), &update)
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.Errorf("error updating vkcs_db_config_group: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error updating vkcs_db_config_group: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 	return resourceDatabaseConfigGroupRead(ctx, d, meta)
 }
@@ -196,9 +200,10 @@ func resourceDatabaseConfigGroupDelete(ctx context.Context, d *schema.ResourceDa
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	err = cg.Delete(DatabaseV1Client, d.Id()).ExtractErr()
+	result := cg.Delete(DatabaseV1Client, d.Id())
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error deleting vkcs_db_config_group"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error deleting vkcs_db_config_group"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	return nil

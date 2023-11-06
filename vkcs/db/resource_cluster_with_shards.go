@@ -540,9 +540,10 @@ func resourceDatabaseClusterWithShardsCreate(ctx context.Context, d *schema.Reso
 	clust := clusters.Cluster{}
 	clust.Cluster = createOpts
 
-	cluster, err := clusters.Create(DatabaseV1Client, clust).Extract()
+	result := clusters.Create(DatabaseV1Client, clust)
+	cluster, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("error creating vkcs_db_cluster_with_shards: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating vkcs_db_cluster_with_shards: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	// Store the ID now
@@ -577,10 +578,11 @@ func resourceDatabaseClusterWithShardsCreate(ctx context.Context, d *schema.Reso
 			}
 		}
 		attachConfigurationOpts.ConfigurationAttach.ConfigurationID = configuration.(string)
-		err := clusters.ClusterAction(DatabaseV1Client, cluster.ID, &attachConfigurationOpts).ExtractErr()
+		result := clusters.ClusterAction(DatabaseV1Client, cluster.ID, &attachConfigurationOpts)
+		err := result.ExtractErr()
 		if err != nil {
-			return diag.Errorf("error attaching configuration group %s to vkcs_db_cluster_with_shards %s: %s",
-				configuration, cluster.ID, err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error attaching configuration group %s to vkcs_db_cluster_with_shards %s: %s",
+				configuration, cluster.ID, err), result.Header.Get(util.RequestIDHeader)))
 		}
 
 		stateConf := &retry.StateChangeConf{
@@ -627,9 +629,10 @@ func resourceDatabaseClusterWithShardsRead(ctx context.Context, d *schema.Resour
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	cluster, err := clusters.Get(DatabaseV1Client, d.Id()).Extract()
+	result := clusters.Get(DatabaseV1Client, d.Id())
+	cluster, err := result.Extract()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "error retrieving vkcs_db_cluster_with_shards"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "error retrieving vkcs_db_cluster_with_shards"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	log.Printf("[DEBUG] Retrieved vkcs_db_cluster_with_shards %s: %#v", d.Id(), cluster)
@@ -833,9 +836,10 @@ func resourceDatabaseClusterWithShardsDelete(ctx context.Context, d *schema.Reso
 		return diag.Errorf("Error creating VKCS database client: %s", err)
 	}
 
-	err = clusters.Delete(DatabaseV1Client, d.Id()).ExtractErr()
+	result := clusters.Delete(DatabaseV1Client, d.Id())
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "Error deleting vkcs_db_cluster_with_shards"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "Error deleting vkcs_db_cluster_with_shards"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	stateConf := &retry.StateChangeConf{

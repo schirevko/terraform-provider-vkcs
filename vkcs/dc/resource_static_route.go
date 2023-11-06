@@ -148,9 +148,10 @@ func (r *StaticRouteResource) Create(ctx context.Context, req resource.CreateReq
 		Metric:      int(data.Metric.ValueInt64()),
 	}
 
-	staticRouteResp, err := staticroutes.Create(networkingClient, &staticroutes.StaticRouteCreate{StaticRoute: &staticRouteCreateOpts}).Extract()
+	result := staticroutes.Create(networkingClient, &staticroutes.StaticRouteCreate{StaticRoute: &staticRouteCreateOpts})
+	staticRouteResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_static_route", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_static_route", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	staticRouteID := staticRouteResp.ID
@@ -193,11 +194,12 @@ func (r *StaticRouteResource) Read(ctx context.Context, req resource.ReadRequest
 
 	staticRouteID := data.ID.ValueString()
 
-	staticRouteResp, err := staticroutes.Get(networkingClient, staticRouteID).Extract()
+	result := staticroutes.Get(networkingClient, staticRouteID)
+	staticRouteResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_static_route", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_static_route", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -252,9 +254,10 @@ func (r *StaticRouteResource) Update(ctx context.Context, req resource.UpdateReq
 		Metric:      int(plan.Metric.ValueInt64()),
 	}
 
-	staticRouteResp, err := staticroutes.Update(networkingClient, staticRouteID, &staticroutes.StaticRouteUpdate{StaticRoute: &staticRouteUpdateOpts}).Extract()
+	result := staticroutes.Update(networkingClient, staticRouteID, &staticroutes.StaticRouteUpdate{StaticRoute: &staticRouteUpdateOpts})
+	staticRouteResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_static_route", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_static_route", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -295,9 +298,10 @@ func (r *StaticRouteResource) Delete(ctx context.Context, req resource.DeleteReq
 
 	id := data.ID.ValueString()
 
-	err = staticroutes.Delete(networkingClient, id).ExtractErr()
+	result := staticroutes.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_static_route", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_static_route", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

@@ -137,9 +137,10 @@ func (r *VRRPAddressResource) Create(ctx context.Context, req resource.CreateReq
 		IPAddress:   data.IPAddress.ValueString(),
 	}
 
-	vrrpAddressResp, err := vrrpaddresses.Create(networkingClient, &vrrpaddresses.VRRPAddressCreate{VRRPAddress: &vrrpAddressCreateOpts}).Extract()
+	result := vrrpaddresses.Create(networkingClient, &vrrpaddresses.VRRPAddressCreate{VRRPAddress: &vrrpAddressCreateOpts})
+	vrrpAddressResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_vrrp_address", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_vrrp_address", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	vrrpAddressID := vrrpAddressResp.ID
@@ -181,11 +182,12 @@ func (r *VRRPAddressResource) Read(ctx context.Context, req resource.ReadRequest
 
 	vrrpAddressID := data.ID.ValueString()
 
-	vrrpAddressResp, err := vrrpaddresses.Get(networkingClient, vrrpAddressID).Extract()
+	result := vrrpaddresses.Get(networkingClient, vrrpAddressID)
+	vrrpAddressResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_vrrp_address", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_vrrp_address", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -238,9 +240,10 @@ func (r *VRRPAddressResource) Update(ctx context.Context, req resource.UpdateReq
 		Description: plan.Description.ValueString(),
 	}
 
-	vrrpAddressResp, err := vrrpaddresses.Update(networkingClient, vrrpAddressID, &vrrpaddresses.VRRPAddressUpdate{VRRPAddress: &vrrpAddressUpdateOpts}).Extract()
+	result := vrrpaddresses.Update(networkingClient, vrrpAddressID, &vrrpaddresses.VRRPAddressUpdate{VRRPAddress: &vrrpAddressUpdateOpts})
+	vrrpAddressResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_vrrp_address", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_vrrp_address", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -280,9 +283,10 @@ func (r *VRRPAddressResource) Delete(ctx context.Context, req resource.DeleteReq
 
 	id := data.ID.ValueString()
 
-	err = vrrpaddresses.Delete(networkingClient, id).ExtractErr()
+	result := vrrpaddresses.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_vrrp_address", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_vrrp_address", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

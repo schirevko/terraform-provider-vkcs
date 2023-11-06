@@ -108,9 +108,11 @@ func resourceDatabaseDatabaseCreate(ctx context.Context, d *schema.ResourceData,
 	}
 
 	databasesList.Databases = append(databasesList.Databases, db)
-	err = databases.Create(DatabaseV1Client, dbmsID, &databasesList, dbmsType).ExtractErr()
+
+	result := databases.Create(DatabaseV1Client, dbmsID, &databasesList, dbmsType)
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.Errorf("error creating vkcs_db_database: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating vkcs_db_database: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	// Store the ID now
@@ -204,9 +206,10 @@ func resourceDatabaseDatabaseDelete(ctx context.Context, d *schema.ResourceData,
 		return nil
 	}
 
-	err = databases.Delete(DatabaseV1Client, dbmsID, databaseName, dbmsType).ExtractErr()
+	result := databases.Delete(DatabaseV1Client, dbmsID, databaseName, dbmsType)
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.Errorf("error deleting vkcs_db_database %s: %s", d.Id(), err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error deleting vkcs_db_database %s: %s", d.Id(), err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	return nil

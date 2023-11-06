@@ -230,25 +230,19 @@ func Create(client *gophercloud.ServiceClient, opts OptsBuilder) (r CreateResult
 		r.Err = err
 		return
 	}
-	var result *http.Response
-	result, r.Err = client.Post(clustersURL(client), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(clustersURL(client), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get performs request to get database cluster
 func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	var result *http.Response
-	result, r.Err = client.Get(clusterURL(client, id), &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Get(clusterURL(client, id), &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -281,13 +275,10 @@ func ClusterAction(client *gophercloud.ServiceClient, id string, opts OptsBuilde
 		r.Err = err
 		return
 	}
-	var result *http.Response
-	result, r.Err = client.Post(clusterURL(client, id), b, nil, &gophercloud.RequestOpts{
+	resp, err := client.Post(clusterURL(client, id), b, nil, &gophercloud.RequestOpts{
 		OkCodes: []int{202},
 	})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -325,11 +316,8 @@ func UpdateBackupSchedule(client *gophercloud.ServiceClient, id string, opts Opt
 }
 
 func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	var result *http.Response
-	result, r.Err = client.Delete(clusterURL(client, id), &gophercloud.RequestOpts{})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	resp, err := client.Delete(clusterURL(client, id), &gophercloud.RequestOpts{})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 

@@ -5,8 +5,8 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
+	ivolumes "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/blockstorage/v3/volumes"
 	"github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/util"
 )
 
@@ -21,7 +21,7 @@ func (opts volumeChangeTypeOpts) ToVolumeChangeTypeMap() (map[string]interface{}
 
 func BlockStorageVolumeStateRefreshFunc(client *gophercloud.ServiceClient, volumeID string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		v, err := volumes.Get(client, volumeID).Extract()
+		v, err := ivolumes.Get(client, volumeID).Extract()
 		if err != nil {
 			if _, ok := err.(gophercloud.ErrDefault404); ok {
 				return v, bsVolumeStatusDeleted, nil

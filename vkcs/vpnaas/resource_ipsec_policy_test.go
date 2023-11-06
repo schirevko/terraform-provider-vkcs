@@ -14,6 +14,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/vpnaas/ipsecpolicies"
+	iipsecpolicies "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/vpnaas/v2/ipsecpolicies"
 )
 
 func TestAccVPNaaSIPSecPolicy_basic(t *testing.T) {
@@ -116,7 +117,7 @@ func testAccCheckIPSecPolicyDestroy(s *terraform.State) error {
 		if rs.Type != "vkcs_vpnaas_ipsec_policy" {
 			continue
 		}
-		_, err = ipsecpolicies.Get(networkingClient, rs.Primary.ID).Extract()
+		_, err = iipsecpolicies.Get(networkingClient, rs.Primary.ID).Extract()
 		if err == nil {
 			return fmt.Errorf("IPSec policy (%s) still exists", rs.Primary.ID)
 		}
@@ -144,7 +145,7 @@ func testAccCheckIPSecPolicyExists(n string, policy *ipsecpolicies.Policy) resou
 			return fmt.Errorf("Error creating VKCS networking client: %s", err)
 		}
 
-		found, err := ipsecpolicies.Get(networkingClient, rs.Primary.ID).Extract()
+		found, err := iipsecpolicies.Get(networkingClient, rs.Primary.ID).Extract()
 		if err != nil {
 			return err
 		}

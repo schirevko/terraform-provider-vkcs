@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
+	ivolumes "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/blockstorage/v3/volumes"
 )
 
 func ComputeVolumeAttachParseID(id string) (string, string, error) {
@@ -33,7 +33,7 @@ func computeVolumeAttachAttachFunc(computeClient *gophercloud.ServiceClient, blo
 			return va, "", err
 		}
 
-		v, err := volumes.Get(blockStorageClient, volumeID).Extract()
+		v, err := ivolumes.Get(blockStorageClient, volumeID).Extract()
 		if err != nil {
 			return va, "", err
 		}

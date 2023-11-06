@@ -127,9 +127,10 @@ func resourceDatabaseUserCreate(ctx context.Context, d *schema.ResourceData, met
 	}
 	usersList.Users = append(usersList.Users, u)
 
-	err = users.Create(DatabaseV1Client, dbmsID, &usersList, dbmsType).ExtractErr()
+	result := users.Create(DatabaseV1Client, dbmsID, &usersList, dbmsType)
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.Errorf("error creating vkcs_db_user: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error creating vkcs_db_user: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	// Store the ID now
@@ -247,9 +248,10 @@ func resourceDatabaseUserUpdate(ctx context.Context, d *schema.ResourceData, met
 
 		for _, databaseForDeletion := range databasesForDeletion {
 			databaseName := databaseForDeletion.(string)
-			err = users.DeleteDatabase(DatabaseV1Client, dbmsID, userName, databaseName, dbmsType).ExtractErr()
+			result := users.DeleteDatabase(DatabaseV1Client, dbmsID, userName, databaseName, dbmsType)
+			err = result.ExtractErr()
 			if err != nil {
-				return diag.Errorf("error deleting database from vkcs_db_user: %s", err)
+				return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error deleting database from vkcs_db_user: %s", err), result.Header.Get(util.RequestIDHeader)))
 			}
 		}
 		newDatabasesOpts := make([]map[string]string, len(newDatabases.([]interface{})))
@@ -259,9 +261,11 @@ func resourceDatabaseUserUpdate(ctx context.Context, d *schema.ResourceData, met
 		userUpdateDatabasesOpts := users.UpdateDatabasesOpts{
 			Databases: newDatabasesOpts,
 		}
-		err = users.UpdateDatabases(DatabaseV1Client, dbmsID, userName, &userUpdateDatabasesOpts, dbmsType).ExtractErr()
+
+		result := users.UpdateDatabases(DatabaseV1Client, dbmsID, userName, &userUpdateDatabasesOpts, dbmsType)
+		err = result.ExtractErr()
 		if err != nil {
-			return diag.Errorf("error adding databases to vkcs_db_user: %s", err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error adding databases to vkcs_db_user: %s", err), result.Header.Get(util.RequestIDHeader)))
 		}
 
 		_, err = stateConf.WaitForStateContext(ctx)
@@ -292,9 +296,10 @@ func resourceDatabaseUserUpdate(ctx context.Context, d *schema.ResourceData, met
 		userUpdateParams.User.Host = new.(string)
 	}
 	if d.HasChange("name") || d.HasChange("host") {
-		err = users.Update(DatabaseV1Client, dbmsID, userName, &userUpdateParams, dbmsType).ExtractErr()
+		result := users.Update(DatabaseV1Client, dbmsID, userName, &userUpdateParams, dbmsType)
+		err = result.ExtractErr()
 		if err != nil {
-			return diag.Errorf("error updating vkcs_db_user: %s", err)
+			return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error updating vkcs_db_user: %s", err), result.Header.Get(util.RequestIDHeader)))
 		}
 		d.SetId(fmt.Sprintf("%s/%s", dbmsID, userUpdateParams.User.Name))
 	}
@@ -327,9 +332,10 @@ func resourceDatabaseUserDelete(ctx context.Context, d *schema.ResourceData, met
 		return nil
 	}
 
-	err = users.Delete(DatabaseV1Client, dbmsID, userName, dbmsType).ExtractErr()
+	result := users.Delete(DatabaseV1Client, dbmsID, userName, dbmsType)
+	err = result.ExtractErr()
 	if err != nil {
-		return diag.Errorf("error deleting vkcs_db_user %s: %s", d.Id(), err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error deleting vkcs_db_user %s: %s", d.Id(), err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	return nil

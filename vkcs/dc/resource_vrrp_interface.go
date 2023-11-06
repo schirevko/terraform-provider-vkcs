@@ -154,9 +154,10 @@ func (r *VRRPInterfaceResource) Create(ctx context.Context, req resource.CreateR
 		Master:        util.ValueKnownBoolPointer(data.Master),
 	}
 
-	vrrpInterfaceResp, err := vrrpinterfaces.Create(networkingClient, &vrrpinterfaces.VRRPInterfaceCreate{VRRPInterface: &vrrpInterfaceCreateOpts}).Extract()
+	result := vrrpinterfaces.Create(networkingClient, &vrrpinterfaces.VRRPInterfaceCreate{VRRPInterface: &vrrpInterfaceCreateOpts})
+	vrrpInterfaceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_vrrp_interface", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_vrrp_interface", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	vrrpInterfaceID := vrrpInterfaceResp.ID
@@ -200,11 +201,12 @@ func (r *VRRPInterfaceResource) Read(ctx context.Context, req resource.ReadReque
 
 	vrrpInterfaceID := data.ID.ValueString()
 
-	vrrpInterfaceResp, err := vrrpinterfaces.Get(networkingClient, vrrpInterfaceID).Extract()
+	result := vrrpinterfaces.Get(networkingClient, vrrpInterfaceID)
+	vrrpInterfaceResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_vrrp_interface", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_vrrp_interface", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -262,9 +264,10 @@ func (r *VRRPInterfaceResource) Update(ctx context.Context, req resource.UpdateR
 		Master:      util.ValueKnownBoolPointer(plan.Master),
 	}
 
-	vrrpInterfaceResp, err := vrrpinterfaces.Update(networkingClient, vrrpInterfaceID, &vrrpinterfaces.VRRPInterfaceUpdate{VRRPInterface: &vrrpInterfaceUpdateOpts}).Extract()
+	result := vrrpinterfaces.Update(networkingClient, vrrpInterfaceID, &vrrpinterfaces.VRRPInterfaceUpdate{VRRPInterface: &vrrpInterfaceUpdateOpts})
+	vrrpInterfaceResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_vrrp_interface", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_vrrp_interface", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -306,9 +309,10 @@ func (r *VRRPInterfaceResource) Delete(ctx context.Context, req resource.DeleteR
 
 	id := data.ID.ValueString()
 
-	err = vrrpinterfaces.Delete(networkingClient, id).ExtractErr()
+	result := vrrpinterfaces.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_vrrp_interface", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_vrrp_interface", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }

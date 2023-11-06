@@ -15,6 +15,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/vpnaas/services"
+	iservices "github.com/vk-cs/terraform-provider-vkcs/vkcs/internal/services/vpnaas/v2/services"
 )
 
 func ResourceService() *schema.Resource {
@@ -112,7 +113,7 @@ func resourceServiceCreate(ctx context.Context, d *schema.ResourceData, meta int
 
 	log.Printf("[DEBUG] Create service: %#v", createOpts)
 
-	service, err := services.Create(networkingClient, createOpts).Extract()
+	service, err := iservices.Create(networkingClient, createOpts).Extract()
 	if err != nil {
 		return diag.FromErr(err)
 	}
@@ -147,7 +148,7 @@ func resourceServiceRead(ctx context.Context, d *schema.ResourceData, meta inter
 		return diag.Errorf("Error creating VKCS networking client: %s", err)
 	}
 
-	service, err := services.Get(networkingClient, d.Id()).Extract()
+	service, err := iservices.Get(networkingClient, d.Id()).Extract()
 	if err != nil {
 		return diag.FromErr(util.CheckDeleted(d, err, "service"))
 	}
@@ -201,7 +202,7 @@ func resourceServiceUpdate(ctx context.Context, d *schema.ResourceData, meta int
 	log.Printf("[DEBUG] Updating service with id %s: %#v", d.Id(), updateOpts)
 
 	if hasChange {
-		service, err := services.Update(networkingClient, d.Id(), updateOpts).Extract()
+		service, err := iservices.Update(networkingClient, d.Id(), updateOpts).Extract()
 		if err != nil {
 			return diag.FromErr(err)
 		}
@@ -234,7 +235,7 @@ func resourceServiceDelete(ctx context.Context, d *schema.ResourceData, meta int
 		return diag.Errorf("Error creating VKCS networking client: %s", err)
 	}
 
-	err = services.Delete(networkingClient, d.Id()).Err
+	err = iservices.Delete(networkingClient, d.Id()).Err
 
 	if err != nil {
 		return diag.FromErr(err)
@@ -256,7 +257,7 @@ func resourceServiceDelete(ctx context.Context, d *schema.ResourceData, meta int
 
 func waitForServiceDeletion(networkingClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		serv, err := services.Get(networkingClient, id).Extract()
+		serv, err := iservices.Get(networkingClient, id).Extract()
 		log.Printf("[DEBUG] Got service %s => %#v", id, serv)
 
 		if err != nil {
@@ -274,7 +275,7 @@ func waitForServiceDeletion(networkingClient *gophercloud.ServiceClient, id stri
 
 func waitForServiceCreation(networkingClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		service, err := services.Get(networkingClient, id).Extract()
+		service, err := iservices.Get(networkingClient, id).Extract()
 		if err != nil {
 			return "", "NOT_CREATED", nil
 		}
@@ -284,7 +285,7 @@ func waitForServiceCreation(networkingClient *gophercloud.ServiceClient, id stri
 
 func waitForServiceUpdate(networkingClient *gophercloud.ServiceClient, id string) retry.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		service, err := services.Get(networkingClient, id).Extract()
+		service, err := iservices.Get(networkingClient, id).Extract()
 		if err != nil {
 			return "", "PENDING_UPDATE", nil
 		}

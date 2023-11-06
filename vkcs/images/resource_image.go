@@ -290,9 +290,10 @@ func resourceImagesImageCreate(ctx context.Context, d *schema.ResourceData, meta
 	d.Partial(true)
 
 	log.Printf("[DEBUG] Create Options: %#v", createOpts)
-	newImg, err := images.Create(imageClient, createOpts).Extract()
+	result := images.Create(imageClient, createOpts)
+	newImg, err := result.Extract()
 	if err != nil {
-		return diag.Errorf("Error creating Image: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error creating Image: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	d.SetId(newImg.ID)
@@ -324,7 +325,7 @@ func resourceImagesImageCreate(ctx context.Context, d *schema.ResourceData, meta
 
 	res := imagedata.Upload(imageClient, d.Id(), imgFile)
 	if res.Err != nil {
-		return diag.Errorf("Error while uploading file %q: %s", imgFilePath, res.Err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("Error while uploading file %q: %s", imgFilePath, res.Err), res.Header.Get(util.RequestIDHeader)))
 	}
 
 	// wait for active
@@ -341,9 +342,10 @@ func resourceImagesImageCreate(ctx context.Context, d *schema.ResourceData, meta
 		return diag.Errorf("Error waiting for Image: %s", err)
 	}
 
-	img, err := images.Get(imageClient, d.Id()).Extract()
+	getResult := images.Get(imageClient, d.Id())
+	img, err := getResult.Extract()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "image"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "image"), getResult.Header.Get(util.RequestIDHeader)))
 	}
 
 	if v, ok := d.GetOk("verify_checksum"); !ok || (ok && v.(bool)) {
@@ -364,9 +366,10 @@ func resourceImagesImageRead(ctx context.Context, d *schema.ResourceData, meta i
 		return diag.Errorf("Error creating VKCS image client: %s", err)
 	}
 
-	img, err := images.Get(imageClient, d.Id()).Extract()
+	result := images.Get(imageClient, d.Id())
+	img, err := result.Extract()
 	if err != nil {
-		return diag.FromErr(util.CheckDeleted(d, err, "image"))
+		return diag.FromErr(util.ErrorWithRequestID(util.CheckDeleted(d, err, "image"), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	log.Printf("[DEBUG] Retrieved Image %s: %#v", d.Id(), img)
@@ -510,9 +513,10 @@ func resourceImagesImageUpdate(ctx context.Context, d *schema.ResourceData, meta
 
 	log.Printf("[DEBUG] Update Options: %#v", updateOpts)
 
-	_, err = images.Update(imageClient, d.Id(), updateOpts).Extract()
+	result := images.Update(imageClient, d.Id(), updateOpts)
+	_, err = result.Extract()
 	if err != nil {
-		return diag.Errorf("error updating image: %s", err)
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error updating image: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	return resourceImagesImageRead(ctx, d, meta)
@@ -526,8 +530,9 @@ func resourceImagesImageDelete(ctx context.Context, d *schema.ResourceData, meta
 	}
 
 	log.Printf("[DEBUG] Deleting Image %s", d.Id())
-	if err := images.Delete(imageClient, d.Id()).Err; err != nil {
-		return diag.Errorf("error deleting Image: %s", err)
+	result := images.Delete(imageClient, d.Id())
+	if err := result.Err; err != nil {
+		return diag.FromErr(util.ErrorWithRequestID(fmt.Errorf("error deleting Image: %s", err), result.Header.Get(util.RequestIDHeader)))
 	}
 
 	d.SetId("")

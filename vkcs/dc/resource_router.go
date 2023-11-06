@@ -132,9 +132,10 @@ func (r *RouterResource) Create(ctx context.Context, req resource.CreateRequest,
 		Description:      data.Description.ValueString(),
 	}
 
-	routerResp, err := routers.Create(networkingClient, &routers.RouterCreate{Router: &routerCreateOpts}).Extract()
+	result := routers.Create(networkingClient, &routers.RouterCreate{Router: &routerCreateOpts})
+	routerResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating vkcs_dc_router", err.Error())
+		resp.Diagnostics.AddError("Error creating vkcs_dc_router", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 	routerID := routerResp.ID
@@ -175,11 +176,12 @@ func (r *RouterResource) Read(ctx context.Context, req resource.ReadRequest, res
 
 	routerID := data.ID.ValueString()
 
-	routerResp, err := routers.Get(networkingClient, routerID).Extract()
+	result := routers.Get(networkingClient, routerID)
+	routerResp, err := result.Extract()
 	if err != nil {
 		checkDeleted := util.CheckDeletedResource(ctx, resp, err)
 		if checkDeleted != nil {
-			resp.Diagnostics.AddError("Error retrieving vkcs_dc_router", checkDeleted.Error())
+			resp.Diagnostics.AddError("Error retrieving vkcs_dc_router", util.MessageWithRequestID(checkDeleted.Error(), result.Header.Get(util.RequestIDHeader)))
 		}
 		return
 	}
@@ -229,9 +231,10 @@ func (r *RouterResource) Update(ctx context.Context, req resource.UpdateRequest,
 		Description: plan.Description.ValueString(),
 	}
 
-	routerResp, err := routers.Update(networkingClient, routerID, &routers.RouterUpdate{Router: &routerUpdateOpts}).Extract()
+	result := routers.Update(networkingClient, routerID, &routers.RouterUpdate{Router: &routerUpdateOpts})
+	routerResp, err := result.Extract()
 	if err != nil {
-		resp.Diagnostics.AddError("Error updating vkcs_dc_router", err.Error())
+		resp.Diagnostics.AddError("Error updating vkcs_dc_router", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 
@@ -268,9 +271,10 @@ func (r *RouterResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	id := data.ID.ValueString()
 
-	err = routers.Delete(networkingClient, id).ExtractErr()
+	result := routers.Delete(networkingClient, id)
+	err = result.ExtractErr()
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_router", err.Error())
+		resp.Diagnostics.AddError("Unable to delete resource vkcs_dc_router", util.MessageWithRequestID(err.Error(), result.Header.Get(util.RequestIDHeader)))
 		return
 	}
 }
